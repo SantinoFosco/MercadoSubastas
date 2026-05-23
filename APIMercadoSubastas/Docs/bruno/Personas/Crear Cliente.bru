@@ -1,0 +1,19 @@
+meta {
+  name: Crear Cliente
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{base_url}}/clientes/
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "identificador": 1,
+    "numeroPais": 1,
+    "verificador": 1
+  }
+}

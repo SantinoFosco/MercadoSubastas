@@ -1,0 +1,24 @@
+meta {
+  name: Crear Subasta
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{base_url}}/subastas/
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "fecha": "2026-06-15",
+    "hora": "10:00:00",
+    "subastador": 1,
+    "ubicacion": "Salón Principal, Buenos Aires",
+    "capacidadAsistentes": 200,
+    "tieneDeposito": "si",
+    "seguridadPropia": "si",
+    "categoria": "comun"
+  }
+}

@@ -1,0 +1,1721 @@
+openapi: 3.0.0
+info:
+  title: API de Mercado Subastas
+  description: API para la aplicacion de subastas de la materia Desarrollo de Aplicaciones 1
+  version: 1.0.0
+servers:
+  - url: http://localhost:3000
+    description: Servidor de desarrollo
+
+tags:
+  - name: Auth y Registro
+    description: Gestión de usuarios, sesiones y medios de pago.
+  - name: Home y Catalogo
+    description: Exploración de subastas y sus productos relacionados
+  - name: Sala de Subastas
+    description: Interacción en tiempo real durante la subasta.
+  - name: Compras
+    description: Seleccion de metodo de pago y envio
+  - name: Personas
+    description: Informacion de personas y sus estadisticas
+  - name: Ventas
+    description: Formularios de publicacion de productos y gestion de mis articulos a la venta
+  - name: Informacion Necesaria
+    description: Informacion definida en la base de datos util para varias pantallas
+
+paths:
+  
+  # ── AUTH ──────────────────────────────────────────────────────────────────
+
+  /auth/login:
+    post:
+      tags: [Auth y Registro]
+      summary: Iniciar sesión
+      description: Autentica al usuario con mail y contraseña.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mail, contraseña]
+              properties:
+                mail:
+                  type: string
+                  format: email
+                  example: "juan.perez@ejemplo.com"
+                contraseña:
+                  type: string
+                  format: password
+                  example: "Xk9#mP2q"
+      responses:
+        '200':
+          description: Login exitoso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: Usuario no autenticado
+        '403':
+          description: Usuario autenticado pero sin permisos
+        '405':
+          description: Fallo interno del servidor
+
+  /auth/logout:
+    post:
+      tags: [Auth y Registro]
+      summary: Cerrar sesión
+      security:
+        - BearerAuth: []
+      responses:
+        '204':
+          description: Sesión cerrada correctamente
+        '401':
+          description: Usuario no autenticado
+        '403':
+          description: Usuario autenticado pero sin permisos
+        '405':
+          description: Fallo interno del servidor
+
+  /auth/cambiar-clave:
+    put:
+      tags: [Auth y Registro]
+      summary: Cambiar contraseña
+      description: Cambio de clave luego de ser aceptado en la plataforma
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [claveActual, nuevaClave, confirmarNuevaClave]
+              properties:
+                claveActual:
+                  type: string
+                  format: password
+                  description: Contraseña actual (puede ser la temporal recibida por mail)
+                  example: "Xk9#mP2q"
+                nuevaClave:
+                  type: string
+                  format: password
+                  minLength: 8
+                  description: Mínimo 8 caracteres, al menos un número y un símbolo
+                  example: "MiClave456@"
+                confirmarNuevaClave:
+                  type: string
+                  format: password
+                  example: "MiClave456@"
+      responses:
+        '200':
+          description: Contraseña actualizada
+          content:
+            application/json:
+              schema:
+                type: string
+                example: Contraseña actualizada con exito
+        '400':
+          description: La clave actual es incorrecta o las nuevas no coinciden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '401':
+          description: Usuario no autenticado
+        '403':
+          description: Usuario autenticado pero sin permisos
+        '405':
+          description: Fallo interno del servidor
+
+  # ── REGISTRO ──────────────────────────────────────────────────────────────
+
+  /auth/registro/iniciar:
+    post:
+      tags: [Auth y Registro]
+      summary: Paso 1 — Enviar datos personales
+      description: |
+        El usuario carga sus datos. Se crea el registro en `personas` y
+        `persona_detalle`. El estado queda pendiente de verificación por
+        un empleado de la empresa.
+
+        La app debe pasar a la pantalla de espera (paso 2).
+
+        Tablas que se escriben: `personas`, `persona_detalle`
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nombre, apellido, documento, mail, direccion, pais]
+              properties:
+                nombre:
+                  type: string
+                  example: "Juan"
+                apellido:
+                  type: string
+                  example: "Pérez"
+                documento:
+                  type: string
+                  description: Número de documento (DNI, pasaporte, etc.)
+                  example: "35123456"
+                mail:
+                  type: string
+                  format: email
+                  example: "juan.perez@ejemplo.com"
+                direccion:
+                  type: string
+                  description: Domicilio legal
+                  example: "Av. Corrientes 1234, CABA"
+                pais:
+                  type: integer
+                  description: Número del país (FK tabla `paises`)
+                  example: 1
+      responses:
+        '201':
+          description: Registro inicial creado. La app muestra la pantalla de espera.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  mensaje:
+                    type: string
+                    example: "Datos recibidos. Recibirás un mail con tu contraseña cuando seas verificado."
+                  personaId:
+                    type: integer
+                    example: 42
+        '401':
+          description: Usuario no autenticado
+        '403':
+          description: Usuario autenticado pero sin permisos
+        '405':
+          description: Fallo interno del servidor
+        '409':
+          description: Ya existe un usuario con ese mail o número de documento
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                codigo: 409
+                mensaje: "Ya existe un usuario registrado con ese correo electrónico"
+
+  /auth/registro/estado:
+    get:
+      tags: [Auth y Registro]
+      summary: Paso 2 - Consultar estado de verificación de un registro
+      description: |
+        Permite que la app sepa si el usuario ya fue aprobado por un empleado.
+
+        **Lógica:** consulta si el `identificador` existe en la tabla `clientes`.
+        - No existe → pendiente de verificación (empleado aún no lo cargó)
+        - Existe → aprobado, ya tiene categoría asignada, puede hacer login
+
+        Útil para usuarios que vuelven a abrir la app mientras esperan.
+      parameters:
+        - name: mail
+          in: query
+          required: true
+          schema:
+            type: string
+            format: email
+          example: "juan.perez@ejemplo.com"
+      responses:
+        '200':
+          description: Estado actual del registro
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  verificado:
+                    type: boolean
+                    description: |
+                      false → aún no existe en `clientes`, pendiente
+                      true → el empleado ya lo aprobó, puede hacer login con la clave del mail
+                    example: true
+                  categoria:
+                    type: string
+                    enum: [comun, especial, plata, oro, platino]
+                    nullable: true
+                    description: Solo presente si verificado = true
+                    example: "comun"
+                  mensaje:
+                    type: string
+                    example: "Tu cuenta fue verificada. Revisá tu mail para obtener tu contraseña."
+        '401':
+          description: Usuario no autenticado
+        '403':
+          description: Usuario autenticado pero sin permisos
+        '404':
+          description: No existe ningún registro con ese mail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '405':
+          description: Fallo interno del servidor
+
+  /auth/registro/completar:
+    post:
+      tags: [Auth y Registro]
+      summary: Paso 4 — Confirmar registro completo
+      description: |
+        Valida que el usuario tenga al menos 1 medio de pago registrado en
+        `mediosDePago`. A partir de aquí puede explorar la app y ver subastas.
+        Para pujar necesita además que ese medio de pago esté en estado `verificado`.
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Registro completo
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  mensaje:
+                    type: string
+                    example: "Registro completo. Ya podés explorar las subastas."
+                  puedeVerSubastas:
+                    type: boolean
+                    example: true
+                  puedePujar:
+                    type: boolean
+                    description: true solo si al menos 1 medio de pago está en estado verificado
+                    example: false
+        '400':
+          description: No tiene ningún medio de pago registrado aún
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                codigo: 400
+                mensaje: "Debés registrar al menos un medio de pago para continuar."
+        '401':
+          description: Usuario no autenticado
+        '403':
+          description: Usuario autenticado pero sin permisos
+        '405':
+          description: Fallo interno del servidor
+
+  # ── MEDIOS DE PAGO ────────────────────────────────────────────────────────
+
+  /mediosPago:
+    get:
+      tags: [Medios de Pago]
+      summary: Obtener todos los medios de pago del cliente autenticado
+      description: "Tabla consultada: `mediosDePago` (tabla nueva)"
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Lista de medios de pago
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tieneMedioPagoVerificado:
+                    type: boolean
+                    description: Si al menos uno está verificado, el usuario puede pujar
+                    example: false
+                  medios:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MedioPago'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /mediosPago/cuenta-bancaria:
+    post:
+      tags: [Medios de Pago]
+      summary: Agregar cuenta bancaria
+      description: |
+        Nacional o del exterior. Queda en estado `pendiente` hasta verificación.
+        Tabla que se escribe: `mediosDePago`
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CuentaBancariaInput'
+      responses:
+        '201':
+          description: Cuenta registrada (pendiente de verificación)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MedioPago'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /mediosPago/tarjeta:
+    post:
+      tags: [Medios de Pago]
+      summary: Agregar tarjeta de crédito o débito
+      description: |
+        Acepta Visa, Mastercard y AMEX, nacionales o internacionales.
+        Para subastas en dólares solo se aceptan tarjetas internacionales.
+        Tabla que se escribe: `mediosDePago`
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TarjetaInput'
+      responses:
+        '201':
+          description: Tarjeta registrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MedioPago'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /mediosPago/cheque:
+    post:
+      tags: [Medios de Pago]
+      summary: Registrar cheque certificado
+      description: |
+        Debe ser entregado y verificado presencialmente ANTES del inicio de la subasta.
+        Las compras acumuladas no pueden superar el monto del cheque.
+        Tabla que se escribe: `mediosDePago`
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChequeCertificadoInput'
+      responses:
+        '201':
+          description: Cheque registrado (pendiente de verificación presencial)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MedioPago'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /mediosPago/{id}:
+    get:
+      tags: [Medios de Pago]
+      summary: Obtener detalle de un medio de pago
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Detalle del medio de pago
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MedioPago'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: El medio de pago no pertenece al usuario autenticado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags: [Medios de Pago]
+      summary: Actualizar descripción de un medio de pago
+      description: Solo se permite modificar la descripción. Para cambiar datos bancarios, eliminar y crear uno nuevo.
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                descripcion:
+                  type: string
+                  example: "Mi tarjeta Visa principal"
+      responses:
+        '200':
+          description: Actualizado correctamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MedioPago'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: El medio de pago no pertenece al usuario autenticado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [Medios de Pago]
+      summary: Eliminar un medio de pago
+      description: |
+        No se puede eliminar si:
+        - Es el único medio de pago registrado
+        - Está asociado a una subasta activa o compra pendiente de pago
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '204':
+          description: Eliminado correctamente
+        '400':
+          description: No se puede eliminar por restricciones de negocio
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                codigo: 400
+                mensaje: "No podés eliminar tu único medio de pago. Agregá otro primero."
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: El medio de pago no pertenece al usuario autenticado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ── Home y Catalogo ────────────────────────────────────────────────────────────────
+  
+  /home:
+    get:
+      summary: Obtener datos de la pantalla home
+      description: Devuelve toda la información necesaria para renderizar la pantalla principal de la app.
+      tags: [Home y Catalogo]
+      parameters:
+        - name: categoria
+          in: query
+          description: Categoria del usuario para filtrar las subastas permitidas para el
+          required: true
+          schema:
+            type: string
+            enum: [COMUN, ESPECIAL, PLATA, ORO, PLATINO]
+            example: COMUN
+      responses:
+        '200':
+          description: Datos del home cargados con éxito
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  subastaDestacada:
+                    $ref: '#/components/schemas/SubastaDestacada'
+                  subastasGenerales:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SubastaGeneral'
+        '401':
+          description: Usuario no autenticado
+        '403':
+          description: Usuario autenticado pero sin permisos
+        '405':
+          description: Fallo interno del servidor
+
+  /subastas/{subastaId}/catalogo:
+    get:
+      summary: Obtener catálogo de una subasta
+      description: Devuelve el catálogo de productos asociados a una subasta específica.
+      tags: [Home y Catalogo]
+      parameters:
+        - name: subastaId
+          in: path
+          required: true
+          description: Identificador de la subasta
+          schema:
+            type: integer
+            example: 12
+      responses:
+        '200':
+          description: Catálogo obtenido correctamente
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Producto'
+        '404':
+          description: Subasta no encontrada
+        '500':
+          description: Error interno del servidor
+
+  /subastas/{subastaId}/catalogo/{productoId}:
+    get:
+      summary: Obtener detalle de un producto
+      description: Devuelve la informacion extendida de un producto de la subasta
+      tags: [Home y Catalogo]
+      parameters:
+        - name: subastaId
+          in: path
+          required: true
+          description: Identificador de la subasta
+          schema:
+            type: integer
+            example: 1
+        - name: productoId
+          in: path
+          required: true
+          description: Identificador del producto
+          schema:
+            type: integer
+            example: 1
+      responses:
+        '200':
+          description: Detalle del producto obtenido correctamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetalleProducto'
+
+# ── Sala de Subastas ────────────────────────────────────────────────────────────────
+
+  /subasta/{subastaId}/vivo:
+    get:
+      summary: Obtener datos de la subasta en vivo
+      description: Devuelve en tiempo real los datos del producto que se este subastando y otra informacion necesaria
+      tags: [Sala de Subastas]
+      parameters:
+        - name: subastaId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Detalle de la subasta obtenido correctamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VivoSubasta'
+      
+  /pujar:
+    post:
+      summary: Registrar una nueva puja
+      description: Registra una nueva puja sobre un item de catálogo y genera automáticamente un registro en el historial de pujas.
+      tags: [Sala de Subastas]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PujoRequest'
+      responses:
+        '201':
+          description: Puja registrada correctamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PujoResponse'
+        '400':
+          description: Datos inválidos
+        '404':
+          description: Asistente o item no encontrado
+        '500':
+          description: Error interno del servidor
+
+  # ── Compras ────────────────────────────────────────────────────────────────
+
+  /subasta/{subastaId}/{usuarioId}/compras:
+    get:
+      tags: [Compras]
+      summary: Obtener los objetos comprados por un usuario
+      description: Retorna todos los objetos comprados por el usuario junto a su precio final
+      parameters:
+        - name: subastaId
+          in: path
+          required: true
+          schema:
+            type: integer
+            example: 1
+        - name: usuarioId
+          in: path
+          required: true
+          schema:
+            type: integer
+            example: 1
+      responses:
+        '200':
+          description: Lista de objetos comprados
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProductosComprados'
+
+  /subasta/{subastaId}/{usuarioId}/compras/precio:
+    get:
+      tags: [Compras]
+      summary: Obtener precio totoal de la compra
+      description: Devuelve la suma del precio de los productos comprados y el detalle de valor, comision, etc.
+      parameters:
+        - name: subastaId
+          in: path
+          required: true
+          schema:
+            type: integer
+            example: 1
+        - name: usuarioId
+          in: path
+          required: true
+          schema:
+            type: integer
+            example: 1
+      responses:
+        '200':
+          description: Precio final obtenido correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                $ref: '#/components/schemas/PrecioFinal'
+
+
+
+  /subasta/{subastaId}/{usuarioId}/compras/envio:    
+    post:
+      tags: [Compras]
+      summary: Seleccion de metodo de envio
+      parameters:
+        - name: subastaId
+          in: path
+          required: true
+          schema:
+            type: integer
+            example: 1
+        - name: usuarioId
+          in: path
+          required: true
+          schema:
+            type: integer
+            example: 1
+        - name: metodoEnvio
+          in: query
+          schema:
+            type: string
+            enum: [A_DOMICILIO, RETIRO_PERSONAL]
+            example: A_DOMICILIO
+      responses:
+        '200':
+          description: Envio confirmado correctamente
+          content:
+            application/json:
+              schema:
+                type: string
+                example: Envio confirmado correctamente
+
+  /subasta/{subastaId}/{usuarioId}/compras/pagar:
+    post:
+      tags: [Compras]
+      summary: Seleccion de metodo de pago
+      parameters:
+        - name: subastaId
+          in: path
+          required: true
+          schema:
+            type: integer
+            example: 1
+        - name: usuarioId
+          in: path
+          required: true
+          schema:
+            type: integer
+            example: 1
+        - name: metodoPagoId
+          in: query
+          schema:
+            type: integer
+            example: 1
+      responses:
+        '200':
+          description: Pago confirmado correctamente
+          content:
+            application/json:
+              schema:
+                type: string
+                example: Pago confirmado correctamente
+
+  # ── Personas ────────────────────────────────────────────────────────────────
+
+  /personas/{personaId}/perfil:
+    get:
+      tags: [Personas]
+      summary: Obtener datos de una persona
+      description: Devuelve toda la informacion de una persona para visualizar su usuario
+      parameters:
+        - name: personaId
+          in: path
+          required: true
+          description: ID de la persona a Consultar
+          schema:
+            type: integer
+            example: 1
+        - name: token
+          in: query
+          required: true
+          description: Token personal generado en el login para autenticacion
+          schema:
+            type: string
+            example: 1
+      responses:
+        '200':
+          description: Informacion de la persona encontrada
+          content: 
+            application/json:
+              schema:
+                type: object
+                $ref: '#/components/schemas/InfoPersona'
+
+  /personas/{personaId}/resumen:
+    get:
+      tags: [Personas]
+      summary: Obtener estadisticas de una persona
+      description: Devuelve todas las estadisticas de la persona para visualizar en la pantalla estadisticas
+      parameters:
+        - name: personaId
+          in: path
+          required: true
+          description: ID de la persona a Consultar
+          schema:
+            type: integer
+            example: 1
+        - name: token
+          in: query
+          required: true
+          description: Token personal generado en el login para autenticacion
+          schema:
+            type: string
+            example: 1
+      responses:
+        '200':
+          description: Resume de la persona encontrado
+          content:
+            application/json:
+              schema:
+                type: object
+                $ref: '#/components/schemas/Resumen'
+
+  # ── Ventas ────────────────────────────────────────────────────────────────
+
+  /venta:
+    post:
+      tags: [Ventas]
+      summary: Publicacion de un producto
+      description: Envio de los datos de un producto que el usuario desea subastar
+      parameters:
+        - name: nombre
+          in: query
+          required: true
+          description: Nombre del producto
+          schema:
+            type: string
+            example: Reloj Patek Philippe
+        - name: categoria
+          in: query
+          required: true
+          description: Categoria del producto
+          schema:
+            type: string
+            example: Joyeria
+        - name: descripcion
+          in: query
+          required: true
+          description: Descripcion detallada del producto
+          schema:
+            type: string
+        - name: historial
+          in: query
+          required: true
+          description: Breve historia de la proveniencia del producto
+          schema:
+            type: string
+        - name: imagenes
+          in: query
+          required: true
+          description: Fotos del producto
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/Foto'
+      responses:
+       '200':
+          description: Objeto publicado correctamente
+          content:
+            application/json:
+              schema:
+                type: string
+                example: Objeto publicado con exito
+
+  /venta/{personaId}/publicados:
+    get:
+      tags: [Ventas]
+      summary: Obtener objetos publicados
+      description: Obtiene el listado de todos los productos que se publicaron para vender
+      parameters:
+        - name: personaId
+          in: path
+          required: true
+          description: ID de la persona que vende
+          schema:
+            type: integer
+            example: 4
+      responses:
+        '200':
+          description: Objetos a la venta encontrados
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Publicados'
+
+
+  /venta/{personaId}/publicados/{productoId}:
+    get:
+      tags: [Ventas]
+      summary: Obtener estado del objeto
+      description: Devuelve la informacion necesaria sea que el producto fue aprobado o desaprobado
+      parameters:
+        - name: personaId
+          in: path
+          required: true
+          description: ID de la persona que vender
+          schema:
+            type: integer
+            example: 4
+        - name: productoId
+          in: path
+          required: true
+          description: ID del producto a vender
+          schema: 
+            type: integer
+            example: 2
+      responses:
+        '200':
+          description: Estado de la venta encontrado
+          content:
+            application/json:
+              schema:
+                type: object
+                $ref: '#/components/schemas/EstadoVenta'
+
+  /venta/{personaId}/publicados/{productoId}/vender:
+    post:
+      tags: [Ventas]
+      summary: Confirmacion de venta
+      description: Una vez aprobado el articulo por la empresa subastadora el usuario confirma la venta del producto
+      parameters:
+        - name: personaId
+          in: path
+          required: true
+          description: ID de la persona que vender
+          schema:
+            type: integer
+            example: 4
+        - name: productoId
+          in: path
+          required: true
+          description: ID del producto a vender
+          schema: 
+            type: integer
+            example: 2
+      responses:
+        '200':
+          description: Articulo confirmado para la venta
+          content:
+            application/json:
+              schema:
+                type: string
+                example: Felicitaciones! Confirmaste la venta de tu articulo
+
+  /venta/{personaId}/publicados/{productoId}/info:
+    get:
+      tags: [Ventas]
+      summary: Informacion del producto a la venta
+      description: Devuelve datos del seguro y ubicacion del producto que vende el usuario
+      parameters:
+        - name: personaId
+          in: path
+          required: true
+          description: ID de la persona que vender
+          schema:
+            type: integer
+            example: 4
+        - name: productoId
+          in: path
+          required: true
+          description: ID del producto a vender
+          schema: 
+            type: integer
+            example: 2
+      responses:
+        '200':
+          description: Informacion del articulo encontrada
+          content:
+            application/json:
+              schema:
+                type: object
+                $ref: '#/components/schemas/InfoVenta'
+
+
+  # ── Informacion Necesaria ────────────────────────────────────────────────────────────────
+
+  /paises:
+    get:
+      tags: [Informacion Necesaria]
+      summary: Obtener listado de países
+      description: Obtiene todos los datos de todos los paises
+      responses:
+        '200':
+          description: Lista completa de países
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Pais'
+
+  /paises/{numero}:
+    get:
+      tags: [Informacion Necesaria]
+      summary: Obtener un país por número
+      parameters:
+        - name: numero
+          in: path
+          required: true
+          schema:
+            type: integer
+          example: 1
+      responses:
+        '200':
+          description: Datos del país
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pais'
+        '401':
+          description: Usuario no autenticado
+        '403':
+          description: Usuario autenticado pero sin permisos
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '405':
+          description: Fallo interno del servidor
+
+  /categorias:
+    get:
+      tags: [Informacion Necesaria]
+      summary: Obtener las categorias de productos
+      responses:
+        '200':
+          description: Datos de las categorias
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Categorias'
+
+  /envios/{usuarioId}/{subastaId}:
+    get:
+      tags: [Informacion Necesaria]
+      summary: Obtencion de metodos de envio
+      description: Devuelve los metodos de envio disponibles para una compra, dependiendo de la subasta y el usuario
+      parameters:
+        - name: subastaId
+          in: path
+          required: true
+          schema:
+            type: integer
+            example: 1
+        - name: usuarioId
+          in: path
+          required: true
+          schema:
+            type: integer
+            example: 1
+      responses:
+        '200':
+          description: Metodos de envio obtenidos correctamente
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MetodoEnvio'
+
+components:
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT obtenido en POST /auth/login
+
+  parameters:
+    IdPath:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+      example: 1
+
+  responses:
+    Unauthorized:
+      description: No autenticado o token inválido/expirado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            codigo: 401
+            mensaje: "Token inválido o sesión expirada"
+
+    NotFound:
+      description: Recurso no encontrado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            codigo: 404
+            mensaje: "Recurso no encontrado"
+    
+    ValidationError:
+      description: Error de validación de los datos enviados
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ValidationErrorResponse'
+
+  schemas:
+    LoginResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          description: JWT para incluir en Authorization header
+          example: "eyJhbGciOiJIUzI1NiJ9..."
+        usuario:
+          $ref: '#/components/schemas/UsuarioResumen'
+
+    UsuarioResumen:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Identificador de la tabla `personas`
+          example: 42
+        nombre:
+          type: string
+          example: "Juan Pérez"
+        mail:
+          type: string
+          example: "juan.perez@ejemplo.com"
+        categoria:
+          type: string
+          enum: [comun, especial, plata, oro, platino]
+          description: Asignada por el empleado en `clientes`. Determina qué subastas puede ver.
+          example: "comun"
+        esClaveTemporal:
+          type: boolean
+          description: |
+            true → login con contraseña random del mail. La app debe redirigir
+            obligatoriamente a PUT /auth/cambiar-clave antes de cualquier otra acción.
+          example: true
+        estadoRegistro:
+          type: string
+          enum: [completo, pendiente_medios_de_pago]
+          description: |
+            pendiente_medios_de_pago → ir al paso 4
+            completo → puede explorar la app
+          example: "pendiente_medios_de_pago"
+        puedePujar:
+          type: boolean
+          description: true si tiene al menos 1 medio de pago en estado verificado
+          example: false
+
+    ValidationErrorResponse:
+      type: object
+      properties:
+        codigo:
+          type: integer
+          example: 422
+        errores:
+          type: array
+          items:
+            type: object
+            properties:
+              campo:
+                type: string
+                example: "mail"
+              mensaje:
+                type: string
+                example: "El formato del correo no es válido"
+
+    Error:
+      type: object
+      properties:
+        codigo:
+          type: integer
+          example: 404
+        mensaje:
+          type: string
+          example: "Recurso no encontrado"
+
+    Pais:
+      type: object
+      properties:
+        numero:
+          type: integer
+          example: 1
+        nombre:
+          type: string
+          example: "Argentina"
+        nombreCorto:
+          type: string
+          nullable: true
+          example: "ARG"
+        nacionalidad:
+          type: string
+          example: "Argentina"
+
+    MedioPago:
+      type: object
+      description: Registro en tabla nueva `mediosDePago`
+      properties:
+        id:
+          type: integer
+          example: 1
+        tipo:
+          type: string
+          enum: [cuenta_bancaria, tarjeta, cheque_certificado]
+          example: "tarjeta"
+        estado:
+          type: string
+          enum: [pendiente, verificado, rechazado]
+          description: |
+            pendiente  → registrado, aún no verificado por la empresa
+            verificado → habilitado para usar en subastas
+            rechazado  → la empresa lo rechazó
+          example: "pendiente"
+        descripcion:
+          type: string
+          description: Texto legible generado por el backend para mostrar en la app
+          example: "Visa terminada en 4242"
+        moneda:
+          type: string
+          enum: [ARS, USD]
+          example: "ARS"
+        esInternacional:
+          type: boolean
+          description: Requerido true para participar en subastas en dólares
+          example: false
+        montoCheque:
+          type: number
+          format: decimal
+          nullable: true
+          description: Solo presente si tipo = cheque_certificado
+          example: 100000.00
+        montoDisponibleCheque:
+          type: number
+          format: decimal
+          nullable: true
+          description: Monto del cheque menos compras ya realizadas con esta garantía
+          example: 100000.00
+    
+    CuentaBancariaInput:
+      type: object
+      required: [titular, banco, cbu, moneda, paisBanco]
+      properties:
+        titular:
+          type: string
+          example: "Juan Pérez"
+        banco:
+          type: string
+          example: "Banco Nación Argentina"
+        cbu:
+          type: string
+          description: CBU / IBAN / número de cuenta según el país del banco
+          example: "0110012345678901234567"
+        alias:
+          type: string
+          nullable: true
+          example: "mi-cuenta-nacion"
+        paisBanco:
+          type: integer
+          description: FK tabla `paises`. Acepta bancos del exterior.
+          example: 1
+        moneda:
+          type: string
+          enum: [ARS, USD]
+          example: "ARS"
+        
+    TarjetaInput:
+      type: object
+      required: [titular, ultimos4Digitos, vencimiento, marca, tipo, moneda]
+      properties:
+        titular:
+          type: string
+          example: "JUAN PEREZ"
+        ultimos4Digitos:
+          type: string
+          description: Solo los últimos 4 dígitos. El número completo nunca se almacena.
+          pattern: '^\d{4}$'
+          example: "4242"
+        vencimiento:
+          type: string
+          pattern: '^\d{2}/\d{2}$'
+          example: "12/27"
+        marca:
+          type: string
+          enum: [VISA, MASTERCARD, AMEX]
+          example: "VISA"
+        tipo:
+          type: string
+          enum: [credito, debito]
+          example: "credito"
+        moneda:
+          type: string
+          enum: [ARS, USD]
+          example: "ARS"
+        esInternacional:
+          type: boolean
+          description: true para tarjetas del exterior. Necesario para subastas en USD.
+          example: false
+
+    ChequeCertificadoInput:
+      type: object
+      required: [banco, numeroCheque, monto, moneda]
+      properties:
+        banco:
+          type: string
+          example: "Banco Galicia"
+        numeroCheque:
+          type: string
+          example: "00123456"
+        monto:
+          type: number
+          format: decimal
+          minimum: 0.01
+          description: Monto certificado. Las compras acumuladas no pueden superar este valor.
+          example: 100000.00
+        moneda:
+          type: string
+          enum: [ARS, USD]
+          example: "ARS"
+        observaciones:
+          type: string
+          nullable: true
+          example: "Entregado en oficina central el 15/04/2026"
+
+    SubastaDestacada:
+      type: object
+      properties:
+        subastaId:
+          type: integer
+          example: 12
+        titulo:
+          type: string
+          example: "Cronógrafos de Lujo"
+        fecha:
+          type: string
+          format: date-time
+          example: '2026-04-12T10:20:00'
+        imagenUrl:
+          type: string
+          example: /productos/310/imagen-principal
+        postoresRegistrados:
+          type: number
+          example: 134
+        actividadReciente:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActividadReciente'
+
+    ActividadReciente:
+      type: object
+      properties:
+        pujaId:
+          type: string
+          example: 1
+        nombreComprador:
+          type: string
+          example: Juan
+        nombreProducto:
+          type: string
+          example: Patek Philippe
+        fecha:
+          type: string
+          format: date-time
+          example: '2026-04-12T10:20:00'
+        valor:
+          type: string
+          example: $40.500
+
+    SubastaGeneral:
+      type: object
+      properties:
+        subastaId:
+          type: integer
+          example: 12
+        titulo:
+          type: string
+          example: "Cronógrafos de Lujo"
+        fecha:
+          type: string
+          format: date-time
+          example: '2026-04-12T10:20:00'
+        imagen:
+          type: string
+          format: byte
+          description: Imagen codificada en Base64
+      
+    Producto:
+      type: object
+      properties:
+        productoId:
+          type: integer
+          example: 310
+        titulo:
+          type: string
+          example: Reloj Patek Philippe
+        descripcionCorta:
+          type: string
+        precioBase:
+          type: number
+          format: double
+          example: 12000.00
+        subastado:
+          type: string
+          example: 'no'
+        imagen:
+          type: string
+          format: byte
+          description: Imagen codificada en Base64
+
+    DetalleProducto:
+      type: object
+      properties:
+        productoId:
+          type: integer
+          example: 310
+        titulo:
+          type: string
+          example: Reloj Patek Philippe
+        descripcion:
+          type: string
+        precioBase:
+          type: number
+          format: double
+          example: 12000.00
+        subastado:
+          type: string
+          example: 'no'
+        imagen:
+          type: string
+          format: byte
+          description: Imagen codificada en Base64
+
+    VivoSubasta:
+      type: object
+      properties:
+        subastaId:
+          type: integer
+          example: 12
+        productoId:
+          type: integer
+          example: 1
+        titulo:
+          type: string
+          example: Reloj Patek Philippe
+        precioActual:
+          type: number
+          format: double
+          example: 12000.00
+        proximaPuja:
+          type: number
+          format: double
+          example: 12250.00
+        tiempoRestante:
+          type: string
+          format: time
+          example: "00:01:30"
+        imagen:
+          type: string
+          format: byte
+          description: Imagen codificada en Base64
+        pujasTotales:
+          type: number
+          example: 84
+        incrementosSugeridos:
+          type: array
+          items:
+            type: number
+            format: double
+          example: [100, 500, 1000]
+        actividadReciente:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActividadReciente'
+        
+    PujoRequest:
+      type: object
+      required:
+        - asistenteId
+        - itemId
+        - importe
+      properties:
+        asistenteId:
+          type: integer
+          example: 7
+        itemId:
+          type: integer
+          example: 83
+        importe:
+          type: number
+          format: double
+          example: 42500.00
+
+    PujoResponse:
+      type: object
+      properties:
+        pujoId:
+          type: integer
+          example: 25
+        asistenteId:
+          type: integer
+          example: 7
+        itemId:
+          type: integer
+          example: 83
+        importe:
+          type: number
+          format: double
+          example: 42500.00
+        ganador:
+          type: string
+          example: 'si'
+        historialId:
+          type: integer
+          example: 1
+        fechaHora:
+          type: string
+          format: date-time
+          example: '2026-04-12T10:20:00'
+
+    ProductosComprados:
+      type: object
+      properties:
+        productoId:
+          type: integer
+          example: 310
+        titulo:
+          type: string
+          example: Reloj Patek Philippe
+        precioFinal:
+          type: number
+          format: double
+          example: 12000.00
+        subastado:
+          type: string
+          example: 'si'
+        imagen:
+          type: string
+          format: byte
+          description: Imagen codificada en Base64
+
+    PrecioFinal:
+      type: object
+      properties:
+        precioFinal:
+          type: number
+          format: double
+          example: 18.500
+        comision:
+          type: number
+          format: double
+          example: 1850
+        seguro:
+          type: number
+          format: double
+          example: 200
+        total:
+          type: number
+          format: double
+          example: 20.600
+
+    MetodoEnvio:
+      type: object
+      properties:
+        nombre:
+          type: string
+          example: Envio a Domicilio
+        direccion:
+          type: string
+          example: Calle de las Flores 123
+
+    InfoPersona:
+      type: object
+      properties:
+        nombre:
+          type: string
+          example: Alejandro Sanz
+        mail:
+          type: string
+          example: alejandro@gmail.com
+        dni:
+          type: integer
+          example: 12345678
+        pais:
+          type: string
+          example: Argentina
+        direccion:
+          type: string
+          example: Calle Ejemplo 123
+
+    Resumen:
+      type: object
+      properties:
+        participacion:
+          type: integer
+          example: 4
+        totalPagos:
+          type: number
+          format: double
+          example: 145000
+        historialPujas:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActividadReciente'
+
+    Foto:
+      type: string
+      format: byte
+      description: Imagen codificada en Base64
+
+    Categorias:
+      type: object
+      properties:
+        categoriaId:
+          type: integer
+          example: 3
+        nombre:
+          type: string
+          example: Joyeria
+
+    Publicados:
+      type: object
+      properties:
+        productoId:
+          type: integer
+          example: 1
+        nombre:
+          type: string
+          example: Reloj Patek Philippe
+        precioBase:
+          type: number
+          format: double
+          example: 12.500
+        fechaPublicacion:
+          type: string
+          format: date-time
+          example: '2026-04-12T10:20:00'
+        estado:
+          type: string
+          enum: [APROBADO, DESAPROBADO, EN_ESPERA]
+          example: APROBADO
+        
+    EstadoVenta:
+      type: object
+      properties:
+        productoId:
+          type: integer
+          example: 3
+        nombre:
+          type: string
+          example: Reloj Patek Philippe
+        estado:
+          type: string
+          enum: [APROBADO, DESAPROBADO, EN_ESPERA, EN_VENTA]
+          example: APROBADO
+        imagen:
+          type: string
+          format: byte
+          description: Imagen codificada en Base64
+        precioBase:
+          type: integer
+          format: double
+          example: 13.500
+        gananciaEstimada:
+          type: integer
+          format: double
+          example: 11.500
+        costoDevolucion:
+          type: integer
+          format: double
+          example: 0
+
+    InfoVenta:
+      type: object
+      properties:
+        productoId:
+          type: integer
+          example: 4
+        nombre:
+          type: string
+          example: Reloj Patek Philippe
+        ubicacion:
+          type: string
+          example: Desposito Central
+        paisUbicacion:
+          type: string
+          example: España
+        companiaSeguro:
+          type: string
+          example: Seguros Globales
+        numeroPoliza:
+          type: string
+          example: AU-99283-SL
+        valorPoliza:
+          type: number
+          format: double
+          example: 13.500
+        

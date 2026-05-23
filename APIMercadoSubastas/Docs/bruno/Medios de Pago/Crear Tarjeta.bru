@@ -1,0 +1,25 @@
+meta {
+  name: Crear Tarjeta
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{base_url}}/mediosPago/tarjeta
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "cliente": 1,
+    "moneda": "USD",
+    "descripcion": "Visa crédito internacional",
+    "titular": "JUAN PEREZ",
+    "ultimos4Digitos": "4242",
+    "vencimiento": "2027-12-31",
+    "marca": "VISA",
+    "tipoTarjeta": "credito",
+    "esInternacional": true
+  }
+}

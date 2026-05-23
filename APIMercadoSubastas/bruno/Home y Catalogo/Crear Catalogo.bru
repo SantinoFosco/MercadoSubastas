@@ -1,0 +1,19 @@
+meta {
+  name: Crear Catalogo
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{base_url}}/catalogos/
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "descripcion": "Cronógrafos de Lujo - Junio 2026",
+    "subasta": 1,
+    "responsable": 1
+  }
+}

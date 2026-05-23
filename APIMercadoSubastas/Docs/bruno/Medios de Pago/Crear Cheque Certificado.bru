@@ -1,0 +1,23 @@
+meta {
+  name: Crear Cheque Certificado
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{base_url}}/mediosPago/cheque
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "cliente": 1,
+    "moneda": "ARS",
+    "descripcion": "Cheque para subasta de arte",
+    "banco": "Banco Santander",
+    "numeroCheque": "00123456",
+    "monto": "150000.00",
+    "observaciones": "Cheque a 30 días"
+  }
+}

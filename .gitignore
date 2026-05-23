@@ -1,0 +1,66 @@
+# ==========================================
+#   PYTHON / FASTAPI (APIMercadoSubastas)
+# ==========================================
+APIMercadoSubastas/venv/
+APIMercadoSubastas/.venv/
+APIMercadoSubastas/__pycache__/
+APIMercadoSubastas/app/__pycache__/
+APIMercadoSubastas/.env
+APIMercadoSubastas/*.pyc
+APIMercadoSubastas/*.pyo
+APIMercadoSubastas/*.egg-info/
+APIMercadoSubastas/dist/
+APIMercadoSubastas/.pytest_cache/
+
+# ==========================================
+#   NODE / EXPO (FrontMercadoSubastas)
+# ==========================================
+FrontMercadoSubastas/node_modules/
+FrontMercadoSubastas/.expo/
+FrontMercadoSubastas/dist/
+FrontMercadoSubastas/web-build/
+FrontMercadoSubastas/expo-env.d.ts
+FrontMercadoSubastas/.env
+FrontMercadoSubastas/.env*.local
+FrontMercadoSubastas/*.tsbuildinfo
+FrontMercadoSubastas/.metro-health-check*
+FrontMercadoSubastas/npm-debug.*
+FrontMercadoSubastas/yarn-debug.*
+FrontMercadoSubastas/yarn-error.*
+
+# Carpetas nativas generadas por Expo (no se usan en este proyecto)
+FrontMercadoSubastas/ios/
+FrontMercadoSubastas/android/
+FrontMercadoSubastas/.kotlin/
+
+# Certificados y claves nativas
+FrontMercadoSubastas/*.jks
+FrontMercadoSubastas/*.p8
+FrontMercadoSubastas/*.p12
+FrontMercadoSubastas/*.key
+FrontMercadoSubastas/*.mobileprovision
+FrontMercadoSubastas/*.pem
+
+# ==========================================
+#   DOCKER
+# ==========================================
+.env
+
+# Carpeta anterior del front (renombrada a FrontMercadoSubastas)
+Mercado-Subastas/
+
+# ==========================================
+#   SISTEMA OPERATIVO
+# ==========================================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ==========================================
+#   EDITORES / HERRAMIENTAS
+# ==========================================
+.vscode/
+.idea/
+*.swp
+*.swo
+.claude/

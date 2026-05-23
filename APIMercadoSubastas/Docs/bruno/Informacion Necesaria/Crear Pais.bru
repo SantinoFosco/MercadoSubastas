@@ -1,0 +1,21 @@
+meta {
+  name: Crear Pais
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{base_url}}/paises/
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "nombre": "Argentina",
+    "nombreCorto": "ARG",
+    "capital": "Buenos Aires",
+    "nacionalidad": "Argentino/a",
+    "idiomas": "Español"
+  }
+}

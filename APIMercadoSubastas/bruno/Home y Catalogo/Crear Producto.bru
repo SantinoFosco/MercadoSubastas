@@ -1,0 +1,20 @@
+meta {
+  name: Crear Producto
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{base_url}}/productos/
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "descripcionCatalogo": "Reloj Patek Philippe Nautilus",
+    "descripcionCompleta": "Reloj de lujo suizo en acero inoxidable. Referencia 5711/1A-010. Movimiento automático Cal. 324 S C.",
+    "revisor": 1,
+    "duenio": 1
+  }
+}

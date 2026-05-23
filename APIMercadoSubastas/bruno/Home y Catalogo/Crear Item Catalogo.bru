@@ -1,0 +1,20 @@
+meta {
+  name: Crear Item Catalogo
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{base_url}}/items-catalogo/
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "catalogo": 1,
+    "producto": 1,
+    "precioBase": 12000.00,
+    "comision": 1200.00
+  }
+}

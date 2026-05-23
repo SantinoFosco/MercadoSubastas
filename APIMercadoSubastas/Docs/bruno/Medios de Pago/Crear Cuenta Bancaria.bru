@@ -1,0 +1,24 @@
+meta {
+  name: Crear Cuenta Bancaria
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{base_url}}/mediosPago/cuenta-bancaria
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "cliente": 1,
+    "moneda": "ARS",
+    "descripcion": "Cuenta principal Banco Nación",
+    "titular": "Juan Pérez",
+    "banco": "Banco de la Nación Argentina",
+    "cbu": "0110012345678901234567",
+    "alias": "juan.perez.bna",
+    "paisBanco": 1
+  }
+}

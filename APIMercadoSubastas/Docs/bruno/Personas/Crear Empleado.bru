@@ -1,0 +1,18 @@
+meta {
+  name: Crear Empleado
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{base_url}}/empleados/
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "cargo": "Verificador",
+    "sector": 1
+  }
+}

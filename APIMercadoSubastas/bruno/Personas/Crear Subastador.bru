@@ -1,0 +1,19 @@
+meta {
+  name: Crear Subastador
+  type: http
+  seq: 14
+}
+
+post {
+  url: {{base_url}}/subastadores/
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "identificador": 1,
+    "matricula": "MAT-001",
+    "region": "Buenos Aires"
+  }
+}

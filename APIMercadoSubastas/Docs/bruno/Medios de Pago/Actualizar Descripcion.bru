@@ -1,0 +1,17 @@
+meta {
+  name: Actualizar Descripcion
+  type: http
+  seq: 9
+}
+
+put {
+  url: {{base_url}}/mediosPago/1
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "descripcion": "Mi tarjeta Visa principal"
+  }
+}
