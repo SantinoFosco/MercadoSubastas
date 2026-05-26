@@ -90,7 +90,7 @@ export default function PaymentsScreen() {
   // ── Tarjeta state ──────────────────────────────────────────────────────────
   const [cardDescripcion,      setCardDescripcion]      = useState('');
   const [cardTitular,          setCardTitular]          = useState('');
-  const [cardUltimos4,         setCardUltimos4]         = useState('');
+  const [cardFullNumber,       setCardFullNumber]       = useState('');
   const [cardMonth,            setCardMonth]            = useState('');
   const [cardYear,             setCardYear]             = useState('');
   const [cardMonthMenuVisible, setCardMonthMenuVisible] = useState(false);
@@ -126,6 +126,12 @@ export default function PaymentsScreen() {
   const toggleSection = (id: string) =>
     setExpandedCard(prev => (prev === id ? null : id));
 
+  const handleCardNumberChange = (text: string) => {
+    const digits = text.replace(/\D/g, '').slice(0, 16);
+    const formatted = digits.replace(/(.{4})(?=.)/g, '$1 ');
+    setCardFullNumber(formatted);
+  };
+
   const addMethod = (method: PaymentMethod) => {
     setRegisteredMethods(prev => [...prev, method]);
     setExpandedCard(null);
@@ -135,10 +141,11 @@ export default function PaymentsScreen() {
 
   const handleSaveCard = async () => {
     setCardError('');
-    if (!cardTitular.trim())           { setCardError('Ingresá el titular de la tarjeta.'); return; }
-    if (!/^\d{4}$/.test(cardUltimos4)) { setCardError('Ingresá exactamente los últimos 4 dígitos.'); return; }
-    if (!cardMarca)                    { setCardError('Seleccioná la marca de la tarjeta.'); return; }
-    if (!cardMonth || !cardYear)       { setCardError('Seleccioná el mes y año de vencimiento.'); return; }
+    const rawDigits = cardFullNumber.replace(/\s/g, '');
+    if (!cardTitular.trim())      { setCardError('Ingresá el titular de la tarjeta.'); return; }
+    if (rawDigits.length !== 16)  { setCardError('Ingresá los 16 dígitos de la tarjeta.'); return; }
+    if (!cardMarca)               { setCardError('Seleccioná la marca de la tarjeta.'); return; }
+    if (!cardMonth || !cardYear)  { setCardError('Seleccioná el mes y año de vencimiento.'); return; }
     const vencimientoISO = `${cardYear}-${cardMonth}-01`;
 
     setCardLoading(true);
@@ -151,7 +158,7 @@ export default function PaymentsScreen() {
           moneda:          cardEsInternacional ? 'USD' : 'ARS',
           descripcion:     cardDescripcion.trim() || null,
           titular:         cardTitular.trim().toUpperCase(),
-          ultimos4Digitos: cardUltimos4,
+          ultimos4Digitos: rawDigits.slice(-4),
           vencimiento:     vencimientoISO,
           marca:           cardMarca,
           tipoTarjeta:     cardTipo,
@@ -162,7 +169,7 @@ export default function PaymentsScreen() {
       if (!res.ok) { setCardError(data.detail ?? 'Error al guardar la tarjeta.'); return; }
 
       addMethod({ id: data.id, tipo: 'tarjeta', descripcion: data.descripcion });
-      setCardDescripcion(''); setCardTitular(''); setCardUltimos4('');
+      setCardDescripcion(''); setCardTitular(''); setCardFullNumber('');
       setCardMonth(''); setCardYear(''); setCardMarca('');
       setCardTipo('credito'); setCardEsInternacional(false);
     } catch {
@@ -254,7 +261,7 @@ export default function PaymentsScreen() {
 
       {/* 1. APPBAR */}
       <Appbar.Header style={styles.appbar}>
-        <Appbar.BackAction onPress={() => router.back()} color="#614F3A" />
+        <Appbar.BackAction onPress={() => router.navigate('/login')} color="#614F3A" />
         <Image
           source={require('../assets/images/hammer-icon.png')}
           style={styles.logoBadge}
@@ -364,12 +371,12 @@ export default function PaymentsScreen() {
               </View>
 
               <View style={styles.formField}>
-                <Text style={styles.formLabel}>ÚLTIMOS 4 DÍGITOS</Text>
+                <Text style={styles.formLabel}>NÚMERO DE TARJETA</Text>
                 <TextInput
                   style={styles.formInput} placeholderTextColor="#CCC"
-                  placeholder="0000"
-                  value={cardUltimos4} onChangeText={setCardUltimos4}
-                  keyboardType="numeric" maxLength={4}
+                  placeholder="0000 0000 0000 0000"
+                  value={cardFullNumber} onChangeText={handleCardNumberChange}
+                  keyboardType="numeric" maxLength={19}
                 />
               </View>
 

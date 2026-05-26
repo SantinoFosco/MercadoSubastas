@@ -1,18 +1,15 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Stack, useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, View, Image, Pressable, Alert, ActivityIndicator } from 'react-native';
 import { Appbar, Button, Text, TextInput, Menu } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Picker } from '@react-native-picker/picker';
 import { API_ENDPOINTS } from '../constants/api';
 
-const countries = [
-  { label: 'Argentina', value: 1 },
-  { label: 'Uruguay', value: 2 },
-  { label: 'Paraguay', value: 3 },
-  { label: 'Chile', value: 4 },
-];
+type Country = {
+  numero: number;
+  nombre: string;
+};
 
 export default function RegisterStep1() {
   const router = useRouter();
@@ -23,10 +20,23 @@ export default function RegisterStep1() {
   const [documentNumber, setDocumentNumber] = useState('');
   const [email, setEmail] = useState('');
   const [address, setAddress] = useState('');
-  const [country, setCountry] = useState<number>(countries[0].value);
+  const [countries, setCountries] = useState<Country[]>([]);
+  const [countriesLoading, setCountriesLoading] = useState(true);
+  const [country, setCountry] = useState<number>(0);
   const [menuVisible, setMenuVisible] = useState(false);
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    fetch(API_ENDPOINTS.paises)
+      .then(res => res.json())
+      .then((data: Country[]) => {
+        setCountries(data);
+        if (data.length > 0) setCountry(data[0].numero);
+      })
+      .catch(() => {})
+      .finally(() => setCountriesLoading(false));
+  }, []);
 
   const handleSubmit = async () => {
     setHasSubmitted(true);
@@ -222,21 +232,25 @@ export default function RegisterStep1() {
               onDismiss={() => setMenuVisible(false)}
               contentStyle={{ backgroundColor: 'white' }}
               anchor={
-                <Pressable onPress={() => setMenuVisible(true)}>
+                <Pressable onPress={() => !countriesLoading && setMenuVisible(true)}>
                   <View style={[styles.pickerContainer, hasSubmitted && !country && styles.errorBorder]}>
-                    <Text style={styles.pickerText}>
-                      {countries.find(c => c.value === country)?.label || 'Seleccionar País...'}
-                    </Text>
+                    {countriesLoading ? (
+                      <ActivityIndicator size="small" color="#8A6D3B" />
+                    ) : (
+                      <Text style={styles.pickerText}>
+                        {countries.find(c => c.numero === country)?.nombre || 'Seleccionar País...'}
+                      </Text>
+                    )}
                     <MaterialCommunityIcons name="chevron-down" size={20} color="#8A6D3B" />
                   </View>
                 </Pressable>
               }
             >
               {countries.map((c) => (
-                <Menu.Item 
-                  key={c.value} 
-                  onPress={() => { setCountry(c.value); setMenuVisible(false); }} 
-                  title={c.label}
+                <Menu.Item
+                  key={c.numero}
+                  onPress={() => { setCountry(c.numero); setMenuVisible(false); }}
+                  title={c.nombre}
                   titleStyle={{ color: '#333' }}
                 />
               ))}

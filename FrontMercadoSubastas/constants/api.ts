@@ -14,6 +14,8 @@ export const API_ENDPOINTS = {
   registroDesaprobar: `${API_BASE_URL}/auth/registro/desaprobar`,
   login:              `${API_BASE_URL}/auth/login`,
   cambiarClave:       `${API_BASE_URL}/auth/cambiar-clave`,
+  // Países
+  paises: `${API_BASE_URL}/paises/`,
   // Medios de pago
   medioPagoTarjeta: `${API_BASE_URL}/mediosPago/tarjeta`,
   medioPagoCuenta:  `${API_BASE_URL}/mediosPago/cuenta-bancaria`,

@@ -39,6 +39,11 @@ export default function SignInScreen() {
 
       const data = await response.json();
 
+      if (response.status === 403) {
+        router.push({ pathname: '/verification', params: { mail: email.trim(), clienteId: String(data.identificador ?? '') } });
+        return;
+      }
+
       if (response.status === 401) {
         setError('Mail o contraseña incorrectos.');
         return;

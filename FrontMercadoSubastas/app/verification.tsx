@@ -15,7 +15,7 @@ export default function VerificationScreen() {
       
       {/* 1. APPBAR */}
       <Appbar.Header style={styles.appbar}>
-        <Appbar.BackAction onPress={() => router.back()} color="#614F3A" />
+        <Appbar.BackAction onPress={() => router.navigate('/login')} color="#614F3A" />
         <Image 
           source={require('../assets/images/hammer-icon.png')} 
           style={styles.logoBadge} 
@@ -66,19 +66,6 @@ export default function VerificationScreen() {
             <Text style={styles.cardText}>
               Revisa tu bandeja de entrada; recibirás un enlace de acceso único.
             </Text>
-          </View>
-
-          {/* MOCK BUTTON PARA DESARROLLO */}
-          <View style={{ marginTop: 30 }}>
-            <Text style={{ textAlign: 'center', color: '#999', fontSize: 12, marginBottom: 10 }}>Opciones de Desarrollo (Solo para probar)</Text>
-            <Button
-              mode="contained"
-              onPress={() => router.push({ pathname: '/register_final', params: { mail, clienteId } })}
-              buttonColor="#2B3966"
-              textColor="white"
-            >
-              Simular Aprobación del Backend
-            </Button>
           </View>
         </View>
 
