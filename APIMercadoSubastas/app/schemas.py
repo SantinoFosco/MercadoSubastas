@@ -132,12 +132,16 @@ class SubastaDestacada(BaseModel):
     fecha: datetime
     imagenUrl: str
     postoresRegistrados: int
+    categoria: str
+    enVivo: bool
     actividadReciente: list[ActividadReciente]
 
 class SubastaGeneral(BaseModel):
     subastaId: int
     titulo: str
     fecha: datetime
+    categoria: str
+    enVivo: bool
     imagen: Optional[str] = None
 
 class HomeResponse(BaseModel):

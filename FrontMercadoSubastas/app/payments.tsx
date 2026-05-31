@@ -730,7 +730,7 @@ export default function PaymentsScreen() {
         {/* 6. BOTÓN CONFIRMAR */}
         <Button
           mode="contained"
-          onPress={() => router.push('/dashboard')}
+          onPress={() => router.push('/exploracion/catalogo')}
           style={styles.submitButton}
           contentStyle={{ height: 56 }}
           labelStyle={styles.submitButtonLabel}

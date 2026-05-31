@@ -5,6 +5,7 @@ import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, TextInput,
 import { Button, Text } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { API_ENDPOINTS } from '../constants/api';
+import { SessionStore } from '../store/session';
 
 export default function SignInScreen() {
   const router = useRouter();
@@ -66,14 +67,17 @@ export default function SignInScreen() {
         return;
       }
 
+      // Guardar sesión (incluye categoria para filtrar el home)
+      SessionStore.set(data);
+
       // Usuario con registro rechazado: puede ingresar pero no operar
       if (data.admitido === 'no') {
-        router.push('/dashboard');
+        router.push('/exploracion');
         return;
       }
 
       // Usuario habilitado normalmente
-      router.push('/dashboard');
+      router.push('/exploracion');
     } catch {
       setError('No se pudo conectar con el servidor. Verificá tu conexión a internet.');
     } finally {

@@ -1,5 +1,5 @@
 from fastapi import HTTPException
-from datetime import datetime
+from datetime import datetime, date, timedelta
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext
@@ -535,10 +535,18 @@ def _get_foto_b64(db: Session, producto_id: int) -> str | None:
     return None
 
 def get_home(db: Session, categoria: str) -> schemas.HomeResponse:
-    subastas = db.query(models.Subasta).filter(
+    ahora = datetime.now()
+
+    candidatas = db.query(models.Subasta).filter(
         models.Subasta.estado == "abierta",
         models.Subasta.categoria == categoria.lower()
     ).order_by(models.Subasta.fecha).all()
+
+    # Solo incluir subastas que aún no terminaron: en vivo o futuras
+    subastas = [
+        s for s in candidatas
+        if datetime.combine(s.fecha, s.hora) + timedelta(hours=3) > ahora
+    ]
 
     if not subastas:
         return schemas.HomeResponse(subastaDestacada=None, subastasGenerales=[])
@@ -583,12 +591,19 @@ def get_home(db: Session, categoria: str) -> schemas.HomeResponse:
     primer_prod = _primer_producto_id(dest.identificador)
     imagen_url = f"/productos/{primer_prod}/imagen-principal" if primer_prod else f"/subastas/{dest.identificador}/imagen-principal"
 
+    def _en_vivo(subasta) -> bool:
+        inicio = datetime.combine(subasta.fecha, subasta.hora)
+        fin = inicio + timedelta(hours=3)
+        return inicio <= ahora < fin
+
     destacada = schemas.SubastaDestacada(
         subastaId=dest.identificador,
         titulo=_titulo_subasta(dest.identificador),
         fecha=datetime.combine(dest.fecha, dest.hora),
         imagenUrl=imagen_url,
         postoresRegistrados=postores,
+        categoria=dest.categoria,
+        enVivo=_en_vivo(dest),
         actividadReciente=actividad
     )
 
@@ -599,6 +614,8 @@ def get_home(db: Session, categoria: str) -> schemas.HomeResponse:
             subastaId=s.identificador,
             titulo=_titulo_subasta(s.identificador),
             fecha=datetime.combine(s.fecha, s.hora),
+            categoria=s.categoria,
+            enVivo=_en_vivo(s),
             imagen=_get_foto_b64(db, prod_id) if prod_id else None
         ))
 

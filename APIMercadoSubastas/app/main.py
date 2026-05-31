@@ -4,46 +4,16 @@ from sqlalchemy.orm import Session
 from . import crud, models, schemas
 from .database import SessionLocal, engine
 from .dev_router import router as dev_router
+from .seeds import seed_paises, seed_empleados, seed_subastas, seed_usuario_prueba
 
 # Crea las tablas si no existen
 models.Base.metadata.create_all(bind=engine)
 
-# Seed inicial: carga los países requeridos por el formulario de registro
-def seed_paises():
-    db = SessionLocal()
-    try:
-        paises_iniciales = [
-            models.Pais(numero=1, nombre="Argentina", nombreCorto="ARG", capital="Buenos Aires",  nacionalidad="Argentina",  idiomas="Español"),
-            models.Pais(numero=2, nombre="Uruguay",   nombreCorto="URY", capital="Montevideo",    nacionalidad="Uruguaya",   idiomas="Español"),
-            models.Pais(numero=3, nombre="Paraguay",  nombreCorto="PRY", capital="Asunción",      nacionalidad="Paraguaya",  idiomas="Español, Guaraní"),
-            models.Pais(numero=4, nombre="Chile",     nombreCorto="CHL", capital="Santiago",      nacionalidad="Chilena",    idiomas="Español"),
-        ]
-        for pais in paises_iniciales:
-            if not db.get(models.Pais, pais.numero):
-                db.add(pais)
-        db.commit()
-    finally:
-        db.close()
-
+# Carga de datos iniciales
 seed_paises()
-
-# Seed inicial: carga los empleados verificadores requeridos por el flujo de registro
-def seed_empleados():
-    db = SessionLocal()
-    try:
-        empleados_iniciales = [
-            models.Empleado(identificador=1, cargo="Verificador", sector=None),
-            models.Empleado(identificador=2, cargo="Verificador", sector=None),
-            models.Empleado(identificador=3, cargo="Verificador", sector=None),
-        ]
-        for empleado in empleados_iniciales:
-            if not db.get(models.Empleado, empleado.identificador):
-                db.add(empleado)
-        db.commit()
-    finally:
-        db.close()
-
 seed_empleados()
+seed_subastas()
+seed_usuario_prueba()
 
 app = FastAPI()
 

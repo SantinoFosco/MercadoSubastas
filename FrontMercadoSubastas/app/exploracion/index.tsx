@@ -1,61 +1,125 @@
-import React from 'react';
-import { View, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Image, ScrollView, TouchableOpacity, StyleSheet, View } from 'react-native';
 import { Text, TextInput } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import BottomTabBar from '@/components/BottomTabBar';
+import { API_ENDPOINTS } from '@/constants/api';
+import { SessionStore } from '@/store/session';
 
-// ── Mock Data ────────────────────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────────────────
 
-type RecentBid = {
-  id: number;
-  initials: string;
-  name: string;
-  time: string;
-  amount: string;
-  color: string;
+type ActividadReciente = {
+  pujaId: number;
+  nombreComprador: string;
+  nombreProducto: string;
+  fecha: string;
+  valor: string;
 };
 
-type UpcomingAuction = {
-  id: number;
-  dateBadge: string;
-  dateBadgeBg: string;
-  dateBadgeColor: string;
-  category: string;
-  title: string;
-  subtitle?: string;
-  price: string;
+type SubastaDestacada = {
+  subastaId: number;
+  titulo: string;
+  fecha: string;
+  imagenUrl: string;
+  postoresRegistrados: number;
+  categoria: string;
+  enVivo: boolean;
+  actividadReciente: ActividadReciente[];
 };
 
-const MOCK_RECENT_BIDS: RecentBid[] = [
-  { id: 1, initials: 'J', name: 'Juan', time: 'Hace 2 minutos', amount: '$43,900', color: '#FFD700' },
-  { id: 2, initials: 'F', name: 'Franco', time: 'Hace 5 minutos', amount: '$41,800', color: '#E0E0E0' },
-  { id: 3, initials: 'C', name: 'Carlos', time: 'Hace 8 minutos', amount: '$40,000', color: '#8A6D3B' },
-];
-
-const MOCK_UPCOMING: UpcomingAuction[] = [
-  { id: 1, dateBadge: 'EN 2 DÍAS', dateBadgeBg: '#FFD700', dateBadgeColor: '#1A1A1A', category: 'RELOJERÍA', title: 'Relojes de Colección', price: '$12,000' },
-  { id: 2, dateBadge: '15 DE MAYO', dateBadgeBg: '#1A1A1A', dateBadgeColor: '#FFFFFF', category: 'VEHÍCULOS', title: 'Clásicos Europeos', subtitle: 'ESTIMADO', price: '$250,000+' },
-  { id: 3, dateBadge: '10 DE MAYO', dateBadgeBg: '#1A1A1A', dateBadgeColor: '#FFFFFF', category: 'JOYERÍA', title: 'Colección de Joyas', subtitle: 'DESDE', price: '$85,000' },
-];
-
-const CATEGORY_ICONS: Record<string, string> = {
-  'RELOJERÍA': 'watch',
-  'VEHÍCULOS': 'car-side',
-  'JOYERÍA': 'diamond-stone',
+type SubastaGeneral = {
+  subastaId: number;
+  titulo: string;
+  fecha: string;
+  categoria: string;
+  enVivo: boolean;
+  imagen: string | null;
 };
 
-// ── Component ────────────────────────────────────────────────────────────────
+type HomeData = {
+  subastaDestacada: SubastaDestacada | null;
+  subastasGenerales: SubastaGeneral[];
+};
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+const AVATAR_COLORS = ['#FFD700', '#8A6D3B', '#E53935', '#1976D2', '#388E3C'];
+
+function getInitials(name: string): string {
+  return name.trim().charAt(0).toUpperCase();
+}
+
+function timeAgo(isoDate: string): string {
+  const diff = Date.now() - new Date(isoDate).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'Ahora';
+  if (mins < 60) return `Hace ${mins} ${mins === 1 ? 'minuto' : 'minutos'}`;
+  const hrs = Math.floor(mins / 60);
+  return `Hace ${hrs} ${hrs === 1 ? 'hora' : 'horas'}`;
+}
+
+function formatTime(isoDate: string): string {
+  const date = new Date(isoDate);
+  const h = date.getHours().toString().padStart(2, '0');
+  const m = date.getMinutes().toString().padStart(2, '0');
+  return `${h}:${m}`;
+}
+
+const MONTHS = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
+
+function formatDateBadge(isoDate: string): { text: string; bg: string; color: string } {
+  const date = new Date(isoDate);
+  const now = new Date();
+  const diffDays = Math.floor((date.getTime() - now.getTime()) / 86400000);
+
+  if (diffDays < 0)  return { text: 'PASADA',           bg: '#999999', color: '#FFFFFF' };
+  if (diffDays === 0) return { text: 'HOY',              bg: '#E53935', color: '#FFFFFF' };
+  if (diffDays <= 7)  return { text: `EN ${diffDays} DÍAS`, bg: '#FFD700', color: '#1A1A1A' };
+  return { text: `${date.getDate()} DE ${MONTHS[date.getMonth()]}`, bg: '#1A1A1A', color: '#FFFFFF' };
+}
+
+const CATEGORY_CONFIG: Record<string, { label: string; textColor: string; badgeBg: string; badgeColor: string }> = {
+  comun:    { label: 'COMÚN',    textColor: '#666666', badgeBg: '#F0F0F0', badgeColor: '#666666' },
+  especial: { label: 'ESPECIAL', textColor: '#6A0DAD', badgeBg: '#F3E8FF', badgeColor: '#6A0DAD' },
+  plata:    { label: 'PLATA',    textColor: '#5C5C5C', badgeBg: '#E8E8E8', badgeColor: '#5C5C5C' },
+  oro:      { label: 'ORO',      textColor: '#8A6D3B', badgeBg: '#FFF8E1', badgeColor: '#8A6D3B' },
+  platino:  { label: 'PLATINO',  textColor: '#2C6E8A', badgeBg: '#E8F4F8', badgeColor: '#2C6E8A' },
+};
+
+function getCategoryConfig(categoria: string) {
+  return CATEGORY_CONFIG[categoria] ?? CATEGORY_CONFIG['comun'];
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
 
 export default function ExploracionScreen() {
   const router = useRouter();
+  const [data, setData] = useState<HomeData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  const handleTabPress = (tab: string) => {
-    if (tab !== 'explorar') {
-      // Other tabs are no-ops for now
+  const fetchHome = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const categoria = SessionStore.getCategoria();
+      const res = await fetch(API_ENDPOINTS.home(categoria));
+      if (!res.ok) throw new Error('Error al cargar el home');
+      const json: HomeData = await res.json();
+      setData(json);
+    } catch {
+      setError('No se pudo cargar la información. Verificá tu conexión.');
+    } finally {
+      setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => { fetchHome(); }, [fetchHome]);
+
+  const destacada = data?.subastaDestacada ?? null;
+  const generales = data?.subastasGenerales ?? [];
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -78,138 +142,170 @@ export default function ExploracionScreen() {
           />
         </View>
 
-        {/* ── Live Now Section ────────────────────────────────────────── */}
-        <View style={styles.liveHeaderRow}>
-          <View style={styles.liveHeaderLeft}>
-            <Text style={styles.liveNowTitle}>Live Now</Text>
-            <View style={styles.liveDot} />
-            <Text style={styles.liveBroadcastText}>LIVE BROADCAST</Text>
-          </View>
-        </View>
+        {loading && (
+          <ActivityIndicator size="large" color="#FFD700" style={{ marginTop: 40 }} />
+        )}
 
-        <TouchableOpacity
-          activeOpacity={0.85}
-          onPress={() => router.push('/exploracion/subasta-vivo')}
-        >
-          <View style={styles.liveCard}>
-            {/* Gradient-like decorative overlays */}
-            <View style={styles.liveCardGradientTop} />
-            <View style={styles.liveCardGradientCenter} />
-            <View style={styles.liveCardGlowAccent} />
+        {!!error && !loading && (
+          <Text style={styles.errorText}>{error}</Text>
+        )}
 
-            {/* EN VIVO badge */}
-            <View style={styles.liveBadge}>
-              <View style={styles.liveBadgeDot} />
-              <Text style={styles.liveBadgeText}>EN VIVO</Text>
+        {!loading && !error && (
+          <>
+            {/* ── Live Now Section ──────────────────────────────────── */}
+            <View style={styles.liveHeaderRow}>
+              <View style={styles.liveHeaderLeft}>
+                <Text style={styles.liveNowTitle}>Subasta Destacada</Text>
+              </View>
             </View>
 
-            {/* Lot info */}
-            <Text style={styles.liveCardLotInfo}>LOTE #442 · 18:00 PM EN VIVO</Text>
+            {destacada ? (
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={() => router.push({
+                  pathname: '/exploracion/catalogo',
+                  params: {
+                    subastaId: String(destacada.subastaId),
+                    enVivo: destacada.enVivo ? 'true' : 'false',
+                  },
+                })}
+              >
+                <View style={styles.liveCard}>
+                  <View style={styles.liveCardGradientTop} />
+                  <View style={styles.liveCardGradientCenter} />
+                  <View style={styles.liveCardGlowAccent} />
 
-            {/* Title */}
-            <Text style={styles.liveCardTitle}>
-              Cronógrafo de Lujo{'\n'}
-              <Text style={styles.liveCardTitleQuoted}>"Solaris 1982"</Text>
-            </Text>
-
-            {/* Decorative watch icon */}
-            <View style={styles.liveCardIconContainer}>
-              <MaterialCommunityIcons name="watch" size={80} color="rgba(255,215,0,0.12)" />
-            </View>
-          </View>
-        </TouchableOpacity>
-
-        {/* ── Actividad Reciente ──────────────────────────────────────── */}
-        <View style={styles.activitySection}>
-          <View style={styles.activityHeader}>
-            <MaterialCommunityIcons name="lightning-bolt" size={18} color="#8A6D3B" />
-            <Text style={styles.activityHeaderText}>Actividad Reciente</Text>
-          </View>
-
-          {MOCK_RECENT_BIDS.map((bid) => (
-            <View key={bid.id} style={styles.bidRow}>
-              <View style={[styles.avatar, { backgroundColor: bid.color }]}>
-                <Text style={[
-                  styles.avatarText,
-                  bid.color === '#E0E0E0' && { color: '#1A1A1A' },
-                ]}>
-                  {bid.initials}
-                </Text>
-              </View>
-              <View style={styles.bidInfo}>
-                <Text style={styles.bidName}>{bid.name}</Text>
-                <Text style={styles.bidTime}>{bid.time}</Text>
-              </View>
-              <Text style={styles.bidAmount}>{bid.amount}</Text>
-            </View>
-          ))}
-
-          <View style={styles.registeredRow}>
-            <MaterialCommunityIcons name="account-group-outline" size={16} color="#999999" />
-            <Text style={styles.registeredText}>Postores registrados: </Text>
-            <Text style={styles.registeredCount}>124</Text>
-          </View>
-        </View>
-
-        {/* ── Upcoming Auctions ──────────────────────────────────────── */}
-        <View style={styles.upcomingHeaderRow}>
-          <Text style={styles.upcomingTitle}>Upcoming Auctions</Text>
-          <TouchableOpacity
-            activeOpacity={0.7}
-            onPress={() => router.push('/exploracion/catalogo')}
-          >
-            <Text style={styles.upcomingLink}>Ver catálogo</Text>
-          </TouchableOpacity>
-        </View>
-
-        {MOCK_UPCOMING.map((auction) => (
-          <TouchableOpacity
-            key={auction.id}
-            activeOpacity={0.85}
-            onPress={() => router.push('/exploracion/detalle-lote')}
-          >
-            <View style={styles.upcomingCard}>
-              {/* Date badge */}
-              <View style={[styles.dateBadge, { backgroundColor: auction.dateBadgeBg }]}>
-                <Text style={[styles.dateBadgeText, { color: auction.dateBadgeColor }]}>
-                  {auction.dateBadge}
-                </Text>
-              </View>
-
-              {/* Image placeholder */}
-              <View style={styles.upcomingImagePlaceholder}>
-                <MaterialCommunityIcons
-                  name={(CATEGORY_ICONS[auction.category] || 'tag-outline') as any}
-                  size={48}
-                  color="#C0C0C0"
-                />
-              </View>
-
-              {/* Category */}
-              <Text style={styles.upcomingCategory}>{auction.category}</Text>
-
-              {/* Title */}
-              <Text style={styles.upcomingCardTitle}>{auction.title}</Text>
-
-              {/* Price row */}
-              <View style={styles.upcomingPriceRow}>
-                <View style={styles.upcomingPriceLeft}>
-                  {auction.subtitle && (
-                    <Text style={styles.upcomingPriceSubtitle}>{auction.subtitle}</Text>
+                  {destacada.enVivo && (
+                    <View style={styles.liveBadge}>
+                      <View style={styles.liveBadgeDot} />
+                      <Text style={styles.liveBadgeText}>EN VIVO</Text>
+                    </View>
                   )}
-                  <Text style={styles.upcomingPrice}>{auction.price}</Text>
+
+                  <Text style={styles.liveCardLotInfo}>
+                    SUBASTA #{destacada.subastaId} · {formatTime(destacada.fecha)}
+                    {destacada.enVivo ? ' EN VIVO' : ''}
+                  </Text>
+
+                  <Text style={styles.liveCardTitle}>
+                    {destacada.titulo}
+                  </Text>
+
+                  <View style={styles.liveCardIconContainer}>
+                    <MaterialCommunityIcons name="gavel" size={80} color="rgba(255,215,0,0.12)" />
+                  </View>
                 </View>
-                <TouchableOpacity activeOpacity={0.6} style={styles.bellButton}>
-                  <MaterialCommunityIcons name="bell-outline" size={22} color="#8A6D3B" />
-                </TouchableOpacity>
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.emptyLiveCard}>
+                <Text style={styles.emptyLiveText}>No hay subastas en vivo en este momento</Text>
               </View>
+            )}
+
+            {/* ── Actividad Reciente ─────────────────────────────────── */}
+            {destacada && (
+              <View style={styles.activitySection}>
+                <View style={styles.activityHeader}>
+                  <MaterialCommunityIcons name="lightning-bolt" size={18} color="#8A6D3B" />
+                  <Text style={styles.activityHeaderText}>Actividad Reciente</Text>
+                </View>
+
+                {destacada.actividadReciente.length === 0 ? (
+                  <Text style={styles.noActivityText}>Sin actividad reciente</Text>
+                ) : (
+                  destacada.actividadReciente.map((bid, index) => (
+                    <View key={bid.pujaId} style={styles.bidRow}>
+                      <View style={[styles.avatar, { backgroundColor: AVATAR_COLORS[index % AVATAR_COLORS.length] }]}>
+                        <Text style={[
+                          styles.avatarText,
+                          AVATAR_COLORS[index % AVATAR_COLORS.length] === '#E0E0E0' && { color: '#1A1A1A' },
+                        ]}>
+                          {getInitials(bid.nombreComprador)}
+                        </Text>
+                      </View>
+                      <View style={styles.bidInfo}>
+                        <Text style={styles.bidName}>{bid.nombreComprador}</Text>
+                        <Text style={styles.bidTime}>{timeAgo(bid.fecha)}</Text>
+                      </View>
+                      <Text style={styles.bidAmount}>{bid.valor}</Text>
+                    </View>
+                  ))
+                )}
+
+                <View style={styles.registeredRow}>
+                  <MaterialCommunityIcons name="account-group-outline" size={16} color="#999999" />
+                  <Text style={styles.registeredText}>Postores registrados: </Text>
+                  <Text style={styles.registeredCount}>{destacada.postoresRegistrados}</Text>
+                </View>
+              </View>
+            )}
+
+            {/* ── Upcoming Auctions ──────────────────────────────────── */}
+            <View style={styles.upcomingHeaderRow}>
+              <Text style={styles.upcomingTitle}>Otras Subastas</Text>
             </View>
-          </TouchableOpacity>
-        ))}
+
+            {generales.length === 0 && (
+              <Text style={styles.noUpcomingText}>No hay próximas subastas</Text>
+            )}
+
+            {generales.map((auction) => {
+              const badge = formatDateBadge(auction.fecha);
+              const cat = getCategoryConfig(auction.categoria);
+              return (
+                <TouchableOpacity
+                  key={auction.subastaId}
+                  activeOpacity={0.85}
+                  onPress={() => router.push({
+                    pathname: '/exploracion/catalogo',
+                    params: {
+                      subastaId: String(auction.subastaId),
+                      enVivo: auction.enVivo ? 'true' : 'false',
+                    },
+                  })}
+                >
+                  <View style={styles.upcomingCard}>
+                    <View style={[styles.dateBadge, { backgroundColor: badge.bg }]}>
+                      <Text style={[styles.dateBadgeText, { color: badge.color }]}>
+                        {badge.text}
+                      </Text>
+                    </View>
+
+                    {auction.imagen ? (
+                      <Image
+                        source={{ uri: `data:image/jpeg;base64,${auction.imagen}` }}
+                        style={styles.upcomingImage}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <View style={styles.upcomingImagePlaceholder}>
+                        <MaterialCommunityIcons name="gavel" size={48} color="#C0C0C0" />
+                      </View>
+                    )}
+
+                    <View style={[styles.categoryBadge, { backgroundColor: cat.badgeBg }]}>
+                      <Text style={[styles.upcomingCategory, { color: cat.textColor }]}>
+                        {cat.label}
+                      </Text>
+                    </View>
+
+                    <Text style={styles.upcomingCardTitle}>{auction.titulo}</Text>
+
+                    <View style={styles.upcomingPriceRow}>
+                      <View />
+                      <TouchableOpacity activeOpacity={0.6} style={styles.bellButton}>
+                        <MaterialCommunityIcons name="bell-outline" size={22} color="#8A6D3B" />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </>
+        )}
       </ScrollView>
 
-      {/* ── Bottom Tab Bar ──────────────────────────────────────────── */}
-      <BottomTabBar activeTab="explorar" onTabPress={handleTabPress} />
+      <BottomTabBar activeTab="explorar" onTabPress={() => {}} />
     </SafeAreaView>
   );
 }
@@ -228,6 +324,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 8,
     paddingBottom: 32,
+  },
+  errorText: {
+    textAlign: 'center',
+    color: '#D32F2F',
+    marginTop: 40,
+    fontSize: 14,
   },
 
   // ── Search ──────────────────────────────────────────────────────
@@ -281,7 +383,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
 
-  // ── Live Card (hero) ────────────────────────────────────────────
+  // ── Live Card ───────────────────────────────────────────────────
   liveCard: {
     backgroundColor: '#1A1A1A',
     borderRadius: 16,
@@ -354,15 +456,23 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     lineHeight: 30,
   },
-  liveCardTitleQuoted: {
-    color: '#FFD700',
-    fontStyle: 'italic',
-  },
   liveCardIconContainer: {
     position: 'absolute',
     bottom: 20,
     right: 20,
     opacity: 0.8,
+  },
+  emptyLiveCard: {
+    backgroundColor: '#F5F5F5',
+    borderRadius: 16,
+    padding: 32,
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  emptyLiveText: {
+    color: '#999999',
+    fontSize: 14,
+    textAlign: 'center',
   },
 
   // ── Actividad Reciente ──────────────────────────────────────────
@@ -384,6 +494,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: '#1A1A1A',
+  },
+  noActivityText: {
+    fontSize: 13,
+    color: '#999999',
+    fontStyle: 'italic',
+    marginBottom: 12,
   },
   bidRow: {
     flexDirection: 'row',
@@ -439,7 +555,7 @@ const styles = StyleSheet.create({
     color: '#1A1A1A',
   },
 
-  // ── Upcoming Auctions Header ────────────────────────────────────
+  // ── Upcoming Auctions ───────────────────────────────────────────
   upcomingHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -456,8 +572,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#8A6D3B',
   },
-
-  // ── Upcoming Card ───────────────────────────────────────────────
+  noUpcomingText: {
+    fontSize: 14,
+    color: '#999999',
+    fontStyle: 'italic',
+    textAlign: 'center',
+    paddingVertical: 24,
+  },
   upcomingCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
@@ -483,6 +604,11 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0.8,
   },
+  upcomingImage: {
+    height: 160,
+    borderRadius: 12,
+    marginBottom: 14,
+  },
   upcomingImagePlaceholder: {
     backgroundColor: '#F0F0F0',
     height: 160,
@@ -491,12 +617,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 14,
   },
+  categoryBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    marginBottom: 6,
+  },
   upcomingCategory: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#8A6D3B',
     letterSpacing: 1.2,
-    marginBottom: 6,
   },
   upcomingCardTitle: {
     fontSize: 18,
@@ -507,22 +638,7 @@ const styles = StyleSheet.create({
   upcomingPriceRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  upcomingPriceLeft: {
-    flexDirection: 'column',
-  },
-  upcomingPriceSubtitle: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#999999',
-    letterSpacing: 0.8,
-    marginBottom: 2,
-  },
-  upcomingPrice: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#1A1A1A',
+    justifyContent: 'flex-end',
   },
   bellButton: {
     width: 40,

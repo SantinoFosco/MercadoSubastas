@@ -20,4 +20,9 @@ export const API_ENDPOINTS = {
   medioPagoTarjeta: `${API_BASE_URL}/mediosPago/tarjeta`,
   medioPagoCuenta:  `${API_BASE_URL}/mediosPago/cuenta-bancaria`,
   medioPagoCheque:  `${API_BASE_URL}/mediosPago/cheque`,
+  // Exploración
+  home:             (categoria: string) => `${API_BASE_URL}/home?categoria=${categoria}`,
+  catalogoSubasta:  (subastaId: number | string) => `${API_BASE_URL}/subastas/${subastaId}/catalogo`,
+  detalleProducto:  (subastaId: number | string, productoId: number | string) =>
+                      `${API_BASE_URL}/subastas/${subastaId}/catalogo/${productoId}`,
 };

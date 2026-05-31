@@ -107,7 +107,7 @@ export default function PasswordSetupScreen() {
           <View style={styles.alertTextContainer}>
             <Text style={styles.alertTitle}>¡Verificación aprobada!</Text>
             <Text style={styles.alertSubtitle}>
-              Crea tu clave para continuar con tu perfil de subastador.
+              Crea tu clave personal con la que accederás a tu cuenta.
             </Text>
           </View>
         </View>
@@ -140,21 +140,6 @@ export default function PasswordSetupScreen() {
             textColor="#1A1A1A"
             secureTextEntry={hideConfirmPassword}
             right={<TextInput.Icon icon={hideConfirmPassword ? "eye-off" : "eye"} color="#8A6D3B" onPress={() => setHideConfirmPassword(!hideConfirmPassword)} />}
-          />
-          
-          <Text style={styles.inputLabel}>INFORMACIÓN DE CONTACTO ADICIONAL</Text>
-          <TextInput
-            value={additionalInfo}
-            onChangeText={setAdditionalInfo}
-            mode="flat"
-            style={styles.textArea}
-            underlineColor="transparent"
-            activeUnderlineColor="transparent"
-            textColor="#1A1A1A"
-            placeholder="Ej: Referencias comerciales o detalles de facturación..."
-            placeholderTextColor="#999"
-            multiline
-            numberOfLines={4}
           />
         </View>
 
