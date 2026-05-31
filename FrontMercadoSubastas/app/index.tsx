@@ -1,6 +1,6 @@
 import { Redirect } from 'expo-router';
 
 export default function Index() {
-  // Redirigimos automáticamente a la pantalla de vender
-  return <Redirect href="/vender" />;
+  // Redirigimos al login como punto de entrada
+  return <Redirect href="/login" />;
 }
