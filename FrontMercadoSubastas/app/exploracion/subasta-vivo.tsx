@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   ScrollView,
@@ -10,8 +10,12 @@ import {
 import { Text } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import BottomTabBar from '@/components/BottomTabBar';
+import { useAuctionWebSocket } from '@/hooks/useAuctionWebSocket';
+import { usePlaceBid } from '@/hooks/usePlaceBid';
+import { SessionStore } from '@/store/session';
+import { API_ENDPOINTS } from '@/constants/api';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -24,55 +28,89 @@ type BidEntry = {
   color: string;
 };
 
-// ── Mock Data ──────────────────────────────────────────────────────────────────
-
-const INITIAL_BIDS: BidEntry[] = [
-  { id: 1, initial: 'R', name: 'Roberto M.', time: 'HACE 12 SEGUNDOS', amount: '$12,450', color: '#FFD700' },
-  { id: 2, initial: 'A', name: 'Ana L.', time: 'HACE 30 SEGUNDOS', amount: '$12,300', color: '#E0E0E0' },
-  { id: 3, initial: 'C', name: 'Carlos D.', time: 'HACE 45 SEGUNDOS', amount: '$12,150', color: '#8A6D3B' },
-];
-
-const QUICK_BID_OPTIONS = [100, 500, 1000];
-
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 const formatCurrency = (value: number): string =>
   '$' + value.toLocaleString('en-US');
 
-const formatTime = (seconds: number): string => {
-  const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-};
-
 // ── Component ──────────────────────────────────────────────────────────────────
 
 export default function SubastaVivoScreen() {
   const router = useRouter();
+  const { subastaId } = useLocalSearchParams<{ subastaId: string }>();
 
-  // State
-  const [timeLeft, setTimeLeft] = useState(45);
-  const [currentBid, setCurrentBid] = useState(12450);
-  const [nextBid, setNextBid] = useState(12600);
-  const [totalBids, setTotalBids] = useState(3);
-  const [bids, setBids] = useState<BidEntry[]>(INITIAL_BIDS);
+  // ── Registro como asistente ─────────────────────────────────────────────────
+  const [asistenteId, setAsistenteId] = useState<number | null>(null);
+  const [registroError, setRegistroError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const cid = SessionStore.get()?.identificador;
+    if (!cid || !subastaId) return;
+
+    fetch(API_ENDPOINTS.registrarAsistente, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cliente: cid, subasta: Number(subastaId) }),
+    })
+      .then(async (res) => {
+        const body = await res.json();
+        if (res.status === 403) {
+          setRegistroError(body.detail ?? 'No tenés categoría para acceder a esta subasta.');
+        } else if (body.identificador) {
+          setAsistenteId(body.identificador);
+        } else {
+          setRegistroError('No se pudo registrar en la subasta.');
+        }
+      })
+      .catch(() => setRegistroError('Error de conexión al registrarse.'));
+  }, [subastaId]);
+
+  const clienteId = SessionStore.get()?.identificador ?? null;
+
+  // ── WebSocket — estado en tiempo real ───────────────────────────────────────
+  const { auctionState, isConnected, auctionEnded, soldInfo, connectionError } =
+    useAuctionWebSocket(subastaId ?? null, clienteId);
+
+  // F6: navegar a la pantalla de ganador si el usuario actual ganó el ítem
+  useEffect(() => {
+    if (!soldInfo || soldInfo.ganadorClienteId !== clienteId || !subastaId) return;
+    const timer = setTimeout(() => {
+      router.push({
+        pathname: '/cierre-subasta/winner',
+        params: { subastaId: subastaId, clienteId: String(clienteId) },
+      });
+    }, 4000); // coincide con el tiempo que dura el overlay VENDIDO
+    return () => clearTimeout(timer);
+  }, [soldInfo]);
+
+  // F3: mostrar error de conexión si el usuario ya está en otra subasta
+  useEffect(() => {
+    if (connectionError) Alert.alert('Conexión rechazada', connectionError);
+  }, [connectionError]);
+
+  // ── Puja ────────────────────────────────────────────────────────────────────
+  const { isBidding, bidError, placeBid } = usePlaceBid();
   const [selectedQuickBid, setSelectedQuickBid] = useState<number | null>(null);
   const [customAmount, setCustomAmount] = useState('');
-  const bidIdRef = useRef(4);
 
-  // Countdown timer
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 0) {
-          clearInterval(interval);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(interval);
-  }, []);
+  // ── Valores derivados del servidor ─────────────────────────────────────────
+  const currentBid    = auctionState?.precioActual ?? 0;
+  const nextBid       = auctionState?.proximaPuja  ?? 0;
+  const maxBid        = auctionState?.pujaMaxima   ?? 0;
+  const totalBids     = auctionState?.pujasTotales ?? 0;
+  const titulo        = auctionState?.titulo       ?? '...';
+  const quickBidOptions = auctionState?.incrementosSugeridos ?? [];
+  const noLimits      = ['oro', 'platino'].includes(auctionState?.categoriaSubasta ?? '');
+
+  // Mapa actividadReciente → BidEntry
+  const bids: BidEntry[] = (auctionState?.actividadReciente ?? []).map((a) => ({
+    id: a.pujaId,
+    initial: a.nombreComprador.charAt(0).toUpperCase(),
+    name: a.nombreComprador,
+    time: new Date(a.fecha).toLocaleTimeString('es-AR'),
+    amount: a.valor,
+    color: '#FFD700',
+  }));
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
 
@@ -81,40 +119,70 @@ export default function SubastaVivoScreen() {
     setCustomAmount('');
   };
 
-  const handlePlaceBid = () => {
-    const bidAmount =
-      customAmount.length > 0
-        ? parseInt(customAmount.replace(/\D/g, ''), 10)
-        : selectedQuickBid ?? 0;
-
-    if (!bidAmount || bidAmount <= 0) {
-      Alert.alert('Selecciona un monto', 'Elige una opción rápida o ingresa un monto personalizado.');
+  const handlePlaceBid = async () => {
+    if (!asistenteId || !auctionState) {
+      Alert.alert('Error', registroError ?? 'No estás registrado en esta subasta.');
       return;
     }
 
-    const newBidValue = currentBid + bidAmount;
-    const newEntry: BidEntry = {
-      id: bidIdRef.current++,
-      initial: 'T',
-      name: 'Tú',
-      time: 'AHORA MISMO',
-      amount: formatCurrency(newBidValue),
-      color: '#FFD700',
-    };
+    const increment =
+      customAmount.length > 0
+        ? parseFloat(customAmount.replace(/[^0-9.]/g, ''))
+        : selectedQuickBid ?? 0;
 
-    setCurrentBid(newBidValue);
-    setNextBid(newBidValue + 150);
-    setTotalBids((prev) => prev + 1);
-    setBids((prev) => [newEntry, ...prev.slice(0, 2)]);
-    setSelectedQuickBid(null);
-    setCustomAmount('');
-    setTimeLeft(45); // Reset timer on new bid
+    if (!increment || increment <= 0) {
+      Alert.alert('Seleccioná un monto', 'Elegí una opción rápida o ingresá un monto personalizado.');
+      return;
+    }
 
-    Alert.alert(
-      '¡Puja realizada! 🔨',
-      `Has pujado ${formatCurrency(newBidValue)}. ¡Buena suerte!`,
-    );
+    const importe = currentBid + increment;
+
+    // Validación local antes de enviar (refleja las reglas del back)
+    if (!noLimits) {
+      if (importe < nextBid) {
+        Alert.alert('Monto muy bajo', `La puja mínima es ${formatCurrency(nextBid)}`);
+        return;
+      }
+      if (importe > maxBid) {
+        Alert.alert('Monto muy alto', `La puja máxima es ${formatCurrency(maxBid)}`);
+        return;
+      }
+    }
+
+    // isBidding=true bloquea el botón hasta recibir respuesta (enunciado: no permitir otro puje hasta confirmación)
+    const ok = await placeBid({
+      asistenteId,
+      itemCatalogoId: auctionState.itemCatalogoId,
+      importe,
+    });
+
+    if (ok) {
+      setSelectedQuickBid(null);
+      setCustomAmount('');
+      // La UI se actualiza sola cuando llega el bid_update por WebSocket
+    } else {
+      Alert.alert('Error al pujar', bidError ?? 'Intentá nuevamente.');
+    }
   };
+
+  // ── Estado: subasta finalizada ───────────────────────────────────────────────
+  if (auctionEnded) {
+    return (
+      <SafeAreaView style={styles.safeArea} edges={['bottom']}>
+        <View style={styles.endedContainer}>
+          <MaterialCommunityIcons name="gavel" size={64} color="#8A6D3B" />
+          <Text style={styles.endedTitle}>¡Subasta finalizada!</Text>
+          <Text style={styles.endedSubtitle}>Todos los lotes fueron adjudicados.</Text>
+        </View>
+        <BottomTabBar
+          activeTab="explorar"
+          onTabPress={(tab) => {
+            if (tab !== 'explorar') router.push(`/${tab}` as any);
+          }}
+        />
+      </SafeAreaView>
+    );
+  }
 
   // ── Render ───────────────────────────────────────────────────────────────────
 
@@ -139,8 +207,8 @@ export default function SubastaVivoScreen() {
 
           {/* EN VIVO badge */}
           <View style={styles.liveBadge}>
-            <View style={styles.liveDot} />
-            <Text style={styles.liveBadgeText}>EN VIVO</Text>
+            <View style={[styles.liveDot, !isConnected && styles.liveDotOff]} />
+            <Text style={styles.liveBadgeText}>{isConnected ? 'EN VIVO' : 'CONECTANDO...'}</Text>
           </View>
 
           {/* Center placeholder icon */}
@@ -150,14 +218,22 @@ export default function SubastaVivoScreen() {
 
           {/* Bottom overlay */}
           <View style={styles.heroOverlay}>
-            <Text style={styles.heroLotLabel}>LOTE #442 · EDICIÓN LIMITADA</Text>
-            <Text style={styles.heroTitle}>
-              {'Cronógrafo de Lujo\n"Solaris 1982"'}
-            </Text>
+            <Text style={styles.heroLotLabel}>LOTE #{auctionState?.itemCatalogoId ?? '...'}</Text>
+            <Text style={styles.heroTitle}>{titulo}</Text>
           </View>
+
+          {/* Overlay ¡VENDIDO! — aparece 4s cuando se cierra un ítem */}
+          {soldInfo && (
+            <View style={styles.soldOverlay}>
+              <MaterialCommunityIcons name="gavel" size={48} color="#FFD700" />
+              <Text style={styles.soldTitle}>¡VENDIDO!</Text>
+              <Text style={styles.soldWinner}>{soldInfo.ganadorNombre}</Text>
+              <Text style={styles.soldAmount}>{formatCurrency(soldInfo.importe)}</Text>
+            </View>
+          )}
         </View>
 
-        {/* ── 2. Stats Row (2×2 grid) ────────────────────────────────────── */}
+        {/* ── 2. Stats Row (3 cards) ─────────────────────────────────────── */}
         <View style={styles.statsGrid}>
           <View style={styles.statsRow}>
             <View style={styles.statBox}>
@@ -165,26 +241,21 @@ export default function SubastaVivoScreen() {
               <Text style={styles.statValueGold}>{formatCurrency(currentBid)}</Text>
             </View>
             <View style={styles.statBox}>
-              <Text style={styles.statLabel}>TIEMPO RESTANTE</Text>
-              <Text
-                style={[
-                  styles.statValueTimer,
-                  timeLeft <= 60 && styles.statValueTimerUrgent,
-                ]}
-              >
-                {formatTime(timeLeft)}
-              </Text>
+              <Text style={styles.statLabel}>PUJAS TOTALES</Text>
+              <Text style={styles.statValueDark}>{totalBids}</Text>
             </View>
           </View>
           <View style={styles.statsRow}>
             <View style={styles.statBox}>
-              <Text style={styles.statLabel}>PUJAS TOTALES</Text>
-              <Text style={styles.statValueDark}>{totalBids}</Text>
-            </View>
-            <View style={styles.statBox}>
-              <Text style={styles.statLabel}>PRÓXIMA PUJA</Text>
+              <Text style={styles.statLabel}>PRÓXIMA PUJA MÍN.</Text>
               <Text style={styles.statValueNext}>{formatCurrency(nextBid)}</Text>
             </View>
+            {!noLimits && (
+              <View style={styles.statBox}>
+                <Text style={styles.statLabel}>PUJA MÁXIMA</Text>
+                <Text style={styles.statValueNext}>{formatCurrency(maxBid)}</Text>
+              </View>
+            )}
           </View>
         </View>
 
@@ -192,54 +263,60 @@ export default function SubastaVivoScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Actividad Reciente</Text>
 
-          {bids.map((bid) => (
-            <View key={bid.id} style={styles.bidRow}>
-              <View style={[styles.avatar, { backgroundColor: bid.color }]}>
-                <Text style={styles.avatarText}>{bid.initial}</Text>
+          {bids.length === 0 ? (
+            <Text style={styles.emptyBids}>Aún no hay pujas. ¡Sé el primero!</Text>
+          ) : (
+            bids.map((bid) => (
+              <View key={bid.id} style={styles.bidRow}>
+                <View style={[styles.avatar, { backgroundColor: bid.color }]}>
+                  <Text style={styles.avatarText}>{bid.initial}</Text>
+                </View>
+                <View style={styles.bidInfo}>
+                  <Text style={styles.bidName}>{bid.name}</Text>
+                  <Text style={styles.bidTime}>{bid.time}</Text>
+                </View>
+                <Text style={styles.bidAmount}>{bid.amount}</Text>
               </View>
-              <View style={styles.bidInfo}>
-                <Text style={styles.bidName}>{bid.name}</Text>
-                <Text style={styles.bidTime}>{bid.time}</Text>
-              </View>
-              <Text style={styles.bidAmount}>{bid.amount}</Text>
-            </View>
-          ))}
+            ))
+          )}
         </View>
 
         {/* ── 4. Quick Bid Buttons ───────────────────────────────────────── */}
-        <View style={styles.section}>
-          <View style={styles.quickBidRow}>
-            {QUICK_BID_OPTIONS.map((amount) => {
-              const isActive = selectedQuickBid === amount;
-              return (
-                <TouchableOpacity
-                  key={amount}
-                  style={[
-                    styles.quickBidButton,
-                    isActive && styles.quickBidButtonActive,
-                  ]}
-                  onPress={() => handleQuickBidSelect(amount)}
-                  activeOpacity={0.7}
-                >
-                  <Text
+        {quickBidOptions.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.quickBidRow}>
+              {quickBidOptions.map((amount) => {
+                const isActive = selectedQuickBid === amount;
+                return (
+                  <TouchableOpacity
+                    key={amount}
                     style={[
-                      styles.quickBidText,
-                      isActive && styles.quickBidTextActive,
+                      styles.quickBidButton,
+                      isActive && styles.quickBidButtonActive,
                     ]}
+                    onPress={() => handleQuickBidSelect(amount)}
+                    activeOpacity={0.7}
                   >
-                    +{formatCurrency(amount)}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
+                    <Text
+                      style={[
+                        styles.quickBidText,
+                        isActive && styles.quickBidTextActive,
+                      ]}
+                    >
+                      +{formatCurrency(amount)}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           </View>
-        </View>
+        )}
 
         {/* ── 5. Custom Amount Input ─────────────────────────────────────── */}
         <View style={styles.section}>
           <TextInput
             style={styles.customInput}
-            placeholder="Ingresa monto personalizado"
+            placeholder="Ingresá un incremento personalizado"
             placeholderTextColor="#999999"
             keyboardType="numeric"
             value={customAmount}
@@ -253,13 +330,18 @@ export default function SubastaVivoScreen() {
         {/* ── 6. PUJAR AHORA Button ──────────────────────────────────────── */}
         <View style={styles.section}>
           <TouchableOpacity
-            style={[styles.bidButton, timeLeft === 0 && styles.bidButtonDisabled]}
+            style={[
+              styles.bidButton,
+              (auctionEnded || isBidding || !asistenteId) && styles.bidButtonDisabled,
+            ]}
             onPress={handlePlaceBid}
             activeOpacity={0.8}
-            disabled={timeLeft === 0}
+            disabled={auctionEnded || isBidding || !asistenteId}
           >
             <MaterialCommunityIcons name="gavel" size={20} color="#FFFFFF" style={styles.bidButtonIcon} />
-            <Text style={styles.bidButtonText}>PUJAR AHORA</Text>
+            <Text style={styles.bidButtonText}>
+              {isBidding ? 'PROCESANDO...' : 'PUJAR AHORA'}
+            </Text>
           </TouchableOpacity>
         </View>
 
@@ -297,6 +379,50 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: 8,
+  },
+
+  // ── Sold Overlay ────────────────────────────────────────────────────────────
+  soldOverlay: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    zIndex: 20,
+  },
+  soldTitle: {
+    color: '#FFD700',
+    fontSize: 32,
+    fontWeight: '900',
+    letterSpacing: 2,
+  },
+  soldWinner: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  soldAmount: {
+    color: '#FFD700',
+    fontSize: 22,
+    fontWeight: '800',
+  },
+
+  // ── Ended ───────────────────────────────────────────────────────────────────
+  endedContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+  },
+  endedTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#1A1A1A',
+  },
+  endedSubtitle: {
+    fontSize: 14,
+    color: '#999999',
   },
 
   // ── Hero ────────────────────────────────────────────────────────────────────
@@ -338,6 +464,9 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: 3,
     backgroundColor: '#FFFFFF',
+  },
+  liveDotOff: {
+    backgroundColor: '#888888',
   },
   liveBadgeText: {
     color: '#FFFFFF',
@@ -403,14 +532,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#8A6D3B',
   },
-  statValueTimer: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#1A1A1A',
-  },
-  statValueTimerUrgent: {
-    color: '#E53935',
-  },
   statValueDark: {
     fontSize: 22,
     fontWeight: '800',
@@ -432,6 +553,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#1A1A1A',
     marginBottom: 14,
+  },
+  emptyBids: {
+    fontSize: 13,
+    color: '#999999',
+    textAlign: 'center',
+    paddingVertical: 12,
   },
 
   // ── Bid Activity ────────────────────────────────────────────────────────────

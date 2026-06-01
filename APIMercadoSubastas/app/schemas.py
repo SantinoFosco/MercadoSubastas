@@ -168,10 +168,14 @@ class DetalleProducto(BaseModel):
 
 class VivoSubasta(BaseModel):
     subastaId: int
+    categoriaSubasta: str
     productoId: int
+    itemCatalogoId: int
+    precioBase: float
     titulo: str
     precioActual: float
     proximaPuja: float
+    pujaMaxima: float
     tiempoRestante: str
     imagen: Optional[str] = None
     pujasTotales: int
@@ -394,6 +398,17 @@ class AsistenteResponse(BaseModel):
     subasta: int
     class Config:
         from_attributes = True
+
+class AsistenteRegistrarRequest(BaseModel):
+    cliente: int
+    subasta: int
+
+class AsistenteRegistrarResponse(BaseModel):
+    identificador: int
+    numeroPostor: int
+    cliente: int
+    subasta: int
+    creado: bool
 
 #------------------ Ventas ---------------------------------#
 

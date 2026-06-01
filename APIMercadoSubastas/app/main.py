@@ -1,10 +1,20 @@
-from fastapi import FastAPI, Depends, HTTPException, Query
+from fastapi import FastAPI, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+import asyncio
+import json
+import os
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from . import crud, models, schemas
 from .database import SessionLocal, engine
 from .dev_router import router as dev_router
-from .seeds import seed_paises, seed_empleados, seed_subastas, seed_usuario_prueba
+from .seeds import seed_paises, seed_empleados, seed_subastas, seed_usuario_prueba, seed_usuario_prueba_2, seed_empresa
+
+# Segundos sin pujas para cerrar el ítem automáticamente (configurable via env)
+AUCTION_ITEM_TIMEOUT = int(os.getenv("AUCTION_ITEM_TIMEOUT", "30"))
+
+# Timers activos por item_catalogo_id
+_item_timers: dict[int, asyncio.Task] = {}
 
 # Crea las tablas si no existen
 models.Base.metadata.create_all(bind=engine)
@@ -14,8 +24,178 @@ seed_paises()
 seed_empleados()
 seed_subastas()
 seed_usuario_prueba()
+seed_usuario_prueba_2()
+seed_empresa()
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ── WebSocket connection manager ────────────────────────────────────────────────
+
+class ConnectionManager:
+    def __init__(self):
+        self.active: dict[int, list[WebSocket]] = {}       # subasta_id → [ws]
+        self.user_subasta: dict[int, int] = {}             # cliente_id → subasta_id activa
+
+    async def connect(self, subasta_id: int, ws: WebSocket, cliente_id: int | None = None) -> str | None:
+        """Acepta la conexión. Retorna un mensaje de error si el usuario ya está en otra subasta."""
+        await ws.accept()
+        # F3: un usuario no puede estar conectado a más de una subasta simultáneamente
+        if cliente_id is not None:
+            subasta_actual = self.user_subasta.get(cliente_id)
+            if subasta_actual is not None and subasta_actual != subasta_id:
+                return f"Ya estás conectado a la subasta #{subasta_actual}. Salí de ella primero."
+            self.user_subasta[cliente_id] = subasta_id
+        self.active.setdefault(subasta_id, []).append(ws)
+        return None
+
+    def disconnect(self, subasta_id: int, ws: WebSocket, cliente_id: int | None = None):
+        if subasta_id in self.active:
+            try:
+                self.active[subasta_id].remove(ws)
+            except ValueError:
+                pass
+            if not self.active[subasta_id]:
+                del self.active[subasta_id]
+        if cliente_id is not None and self.user_subasta.get(cliente_id) == subasta_id:
+            del self.user_subasta[cliente_id]
+
+    async def broadcast(self, subasta_id: int, message: dict):
+        dead = []
+        for ws in self.active.get(subasta_id, []):
+            try:
+                await ws.send_text(json.dumps(message, default=str))
+            except Exception:
+                dead.append(ws)
+        for ws in dead:
+            self.disconnect(subasta_id, ws)
+
+manager = ConnectionManager()
+
+def _vivo_to_dict(vivo: schemas.VivoSubasta) -> dict:
+    return {
+        "subastaId": vivo.subastaId,
+        "categoriaSubasta": vivo.categoriaSubasta,
+        "productoId": vivo.productoId,
+        "itemCatalogoId": vivo.itemCatalogoId,
+        "precioBase": vivo.precioBase,
+        "titulo": vivo.titulo,
+        "precioActual": vivo.precioActual,
+        "proximaPuja": vivo.proximaPuja,
+        "pujaMaxima": vivo.pujaMaxima,
+        "imagen": vivo.imagen,
+        "pujasTotales": vivo.pujasTotales,
+        "incrementosSugeridos": vivo.incrementosSugeridos,
+        "actividadReciente": [
+            {
+                "pujaId": a.pujaId,
+                "nombreComprador": a.nombreComprador,
+                "nombreProducto": a.nombreProducto,
+                "fecha": a.fecha.isoformat(),
+                "valor": a.valor,
+            }
+            for a in vivo.actividadReciente
+        ],
+    }
+
+async def _cerrar_item(item_id: int, subasta_id: int):
+    """Cierra el ítem actual tras AUCTION_ITEM_TIMEOUT segundos sin nuevas pujas."""
+    try:
+        await asyncio.sleep(AUCTION_ITEM_TIMEOUT)
+    except asyncio.CancelledError:
+        return  # Una nueva puja reinició el timer
+
+    db = SessionLocal()
+    try:
+        winning_pujo = db.query(models.Pujo).filter(
+            models.Pujo.item == item_id,
+            models.Pujo.ganador == "si"
+        ).first()
+        item = db.query(models.ItemCatalogo).filter(
+            models.ItemCatalogo.identificador == item_id
+        ).first()
+
+        ganador_nombre    = None
+        ganador_cliente_id = None
+        importe_final     = 0.0
+
+        if not item:
+            return
+
+        producto = db.query(models.Producto).filter(
+            models.Producto.identificador == item.producto
+        ).first()
+
+        item.subastado = "si"
+
+        if winning_pujo:
+            # Usuario ganó el ítem
+            asistente = db.query(models.Asistente).filter(
+                models.Asistente.identificador == winning_pujo.asistente
+            ).first()
+            if asistente and producto:
+                ganador_persona = db.query(models.Persona).filter(
+                    models.Persona.identificador == asistente.cliente
+                ).first()
+                ganador_nombre     = ganador_persona.nombre if ganador_persona else "Desconocido"
+                ganador_cliente_id = asistente.cliente
+                importe_final      = float(winning_pujo.importe)
+                db.add(models.RegistroSubasta(
+                    subasta=subasta_id,
+                    duenio=producto.duenio,
+                    producto=item.producto,
+                    cliente=asistente.cliente,
+                    importe=winning_pujo.importe,
+                    comision=item.comision,
+                ))
+        else:
+            # F4: nadie pujó → la empresa compra por el precio base
+            empresa = db.query(models.Persona).filter(
+                models.Persona.documento == "00000000"
+            ).first()
+            if empresa and producto:
+                ganador_nombre = "Casa de Subastas"
+                importe_final  = float(item.precioBase)
+                db.add(models.RegistroSubasta(
+                    subasta=subasta_id,
+                    duenio=producto.duenio,
+                    producto=item.producto,
+                    cliente=empresa.identificador,
+                    importe=item.precioBase,
+                    comision=item.comision,
+                ))
+
+        db.commit()
+
+        # F6: incluir ganadorClienteId en el mensaje para que el front detecte si el usuario ganó
+        await manager.broadcast(subasta_id, {
+            "type": "item_closed",
+            "data": {
+                "itemCatalogoId":    item_id,
+                "ganadorNombre":     ganador_nombre,
+                "ganadorClienteId":  ganador_cliente_id,
+                "importe":           importe_final,
+            }
+        })
+
+        vivo = crud.get_subasta_en_vivo(db=db, subasta_id=subasta_id)
+        if vivo:
+            await manager.broadcast(subasta_id, {"type": "auction_state", "data": _vivo_to_dict(vivo)})
+        else:
+            await manager.broadcast(subasta_id, {"type": "auction_ended", "data": {"subastaId": subasta_id}})
+
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
+        _item_timers.pop(item_id, None)
 
 app.include_router(dev_router)
 
@@ -223,6 +403,21 @@ def delete_subasta(subasta_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Subasta no encontrada")
     return {"message": f"Subasta {subasta_id} eliminada con éxito"}
 
+@app.post("/asistentes/registrar", response_model=schemas.AsistenteRegistrarResponse)
+def registrar_asistente(request: schemas.AsistenteRegistrarRequest, db: Session = Depends(get_db)):
+    asistente, creado, error = crud.find_or_create_asistente(db=db, cliente=request.cliente, subasta=request.subasta)
+    if error == "categoria_insuficiente":
+        raise HTTPException(status_code=403, detail="Tu categoría no te permite acceder a esta subasta")
+    if error == "no_encontrado":
+        raise HTTPException(status_code=404, detail="Usuario o subasta no encontrada")
+    return schemas.AsistenteRegistrarResponse(
+        identificador=asistente.identificador,
+        numeroPostor=asistente.numeroPostor,
+        cliente=asistente.cliente,
+        subasta=asistente.subasta,
+        creado=creado,
+    )
+
 @app.post("/asistentes/", response_model=schemas.AsistenteResponse, status_code=201)
 def create_asistente(request: schemas.AsistenteCreate, db: Session = Depends(get_db)):
     return crud.create_asistente(db=db, request=request)
@@ -244,13 +439,67 @@ def get_subasta_en_vivo(subasta_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Subasta no encontrada o sin items activos")
     return result
 
+@app.websocket("/ws/subasta/{subasta_id}")
+async def ws_subasta(
+    subasta_id: int,
+    websocket: WebSocket,
+    clienteId: int = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    # F3: registrar conexión y rechazar si el usuario ya está en otra subasta
+    error = await manager.connect(subasta_id, websocket, cliente_id=clienteId)
+    if error:
+        await websocket.send_text(json.dumps({"type": "error", "detail": error}))
+        await websocket.close(code=1008)
+        return
+    try:
+        vivo = crud.get_subasta_en_vivo(db=db, subasta_id=subasta_id)
+        if vivo:
+            await websocket.send_text(json.dumps({"type": "auction_state", "data": _vivo_to_dict(vivo)}, default=str))
+        else:
+            await websocket.send_text(json.dumps({"type": "auction_ended", "data": {"subastaId": subasta_id}}))
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        pass
+    finally:
+        manager.disconnect(subasta_id, websocket, cliente_id=clienteId)
+
 @app.post("/pujar", response_model=schemas.PujoResponse, status_code=201)
-def pujar(request: schemas.PujoRequest, db: Session = Depends(get_db)):
+async def pujar(request: schemas.PujoRequest, db: Session = Depends(get_db)):
     result, error = crud.create_pujo(db=db, request=request)
     if error == "asistente":
         raise HTTPException(status_code=404, detail="Asistente no encontrado")
     if error == "item":
         raise HTTPException(status_code=404, detail="Item de catálogo no encontrado")
+    if error == "sin_medio_verificado":
+        raise HTTPException(status_code=403, detail="Necesitás al menos un medio de pago verificado para pujar")
+    if error == "excede_cheque":
+        raise HTTPException(status_code=422, detail="Esta puja excede el monto disponible de tu cheque certificado")
+    if error == "importe_bajo":
+        raise HTTPException(status_code=422, detail="El importe es inferior al mínimo permitido")
+    if error == "importe_alto":
+        raise HTTPException(status_code=422, detail="El importe supera el máximo permitido")
+
+    # Broadcast actualización a todos los conectados a esta subasta
+    asistente = db.query(models.Asistente).filter(
+        models.Asistente.identificador == request.asistenteId
+    ).first()
+    if asistente:
+        vivo = crud.get_subasta_en_vivo(db=db, subasta_id=asistente.subasta)
+        if vivo:
+            await manager.broadcast(asistente.subasta, {"type": "bid_update", "data": _vivo_to_dict(vivo)})
+        else:
+            await manager.broadcast(asistente.subasta, {"type": "auction_ended", "data": {"subastaId": asistente.subasta}})
+
+        # Reiniciar countdown — si no llega otra puja en AUCTION_ITEM_TIMEOUT segundos, el ítem se cierra
+        existing = _item_timers.get(request.itemId)
+        if existing and not existing.done():
+            existing.cancel()
+        _item_timers[request.itemId] = asyncio.create_task(
+            _cerrar_item(request.itemId, asistente.subasta)
+        )
+
     return result
 
 #------------------ Compras --------------------------------#
@@ -407,3 +656,34 @@ def delete_pais(numero: int, db: Session = Depends(get_db)):
     if not pais:
         raise HTTPException(status_code=404, detail="País no encontrado")
     return pais
+
+#------------------ Dev / Testing --------------------------#
+
+@app.delete("/dev/reset/subasta/{subasta_id}")
+def reset_subasta_dev(subasta_id: int, db: Session = Depends(get_db)):
+    """Resetea el estado de una subasta: cancela timers, borra pujas y asistentes. Solo para dev/test."""
+    catalogo = db.query(models.Catalogo).filter(models.Catalogo.subasta == subasta_id).first()
+    if catalogo:
+        item_ids = [
+            i.identificador for i in db.query(models.ItemCatalogo)
+            .filter(models.ItemCatalogo.catalogo == catalogo.identificador).all()
+        ]
+        # Cancelar timers activos
+        for iid in item_ids:
+            existing = _item_timers.get(iid)
+            if existing and not existing.done():
+                existing.cancel()
+            _item_timers.pop(iid, None)
+        # Borrar historial y pujos
+        db.query(models.HistorialPujos).filter(models.HistorialPujos.subasta == subasta_id).delete()
+        for iid in item_ids:
+            db.query(models.Pujo).filter(models.Pujo.item == iid).delete()
+        # Resetear subastado
+        db.query(models.ItemCatalogo).filter(
+            models.ItemCatalogo.catalogo == catalogo.identificador
+        ).update({"subastado": "no"})
+    # Borrar registros de venta y asistentes
+    db.query(models.RegistroSubasta).filter(models.RegistroSubasta.subasta == subasta_id).delete()
+    db.query(models.Asistente).filter(models.Asistente.subasta == subasta_id).delete()
+    db.commit()
+    return {"mensaje": f"Subasta {subasta_id} reseteada para testing"}

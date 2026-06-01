@@ -8,6 +8,9 @@ from . import models, schemas
 import random
 import base64
 
+# Orden de categorías para validar acceso (mayor número = mayor nivel)
+CATEGORIA_ORDER = {"comun": 1, "especial": 2, "plata": 3, "oro": 4, "platino": 5}
+
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 #------------------ Auth y Registro ------------------------#
@@ -535,18 +538,13 @@ def _get_foto_b64(db: Session, producto_id: int) -> str | None:
     return None
 
 def get_home(db: Session, categoria: str) -> schemas.HomeResponse:
-    ahora = datetime.now()
-
-    candidatas = db.query(models.Subasta).filter(
+    # Subastas abiertas accesibles al usuario (categoria subasta <= categoria usuario)
+    nivel_usuario = CATEGORIA_ORDER.get(categoria.lower(), 0)
+    cats_accesibles = [k for k, v in CATEGORIA_ORDER.items() if v <= nivel_usuario]
+    subastas = db.query(models.Subasta).filter(
         models.Subasta.estado == "abierta",
-        models.Subasta.categoria == categoria.lower()
+        models.Subasta.categoria.in_(cats_accesibles)
     ).order_by(models.Subasta.fecha).all()
-
-    # Solo incluir subastas que aún no terminaron: en vivo o futuras
-    subastas = [
-        s for s in candidatas
-        if datetime.combine(s.fecha, s.hora) + timedelta(hours=3) > ahora
-    ]
 
     if not subastas:
         return schemas.HomeResponse(subastaDestacada=None, subastasGenerales=[])
@@ -592,9 +590,8 @@ def get_home(db: Session, categoria: str) -> schemas.HomeResponse:
     imagen_url = f"/productos/{primer_prod}/imagen-principal" if primer_prod else f"/subastas/{dest.identificador}/imagen-principal"
 
     def _en_vivo(subasta) -> bool:
-        inicio = datetime.combine(subasta.fecha, subasta.hora)
-        fin = inicio + timedelta(hours=3)
-        return inicio <= ahora < fin
+        # Una subasta está "en vivo" mientras su estado sea 'abierta' (enunciado: "subastas abiertas")
+        return subasta.estado == "abierta"
 
     destacada = schemas.SubastaDestacada(
         subastaId=dest.identificador,
@@ -711,6 +708,38 @@ def create_asistente(db: Session, request: schemas.AsistenteCreate):
     db.refresh(nuevo)
     return nuevo
 
+def find_or_create_asistente(db: Session, cliente: int, subasta: int):
+    existente = db.query(models.Asistente).filter(
+        models.Asistente.cliente == cliente,
+        models.Asistente.subasta == subasta
+    ).first()
+    if existente:
+        return existente, False, None
+
+    # F1: Validar que la categoría del usuario sea >= a la de la subasta
+    cliente_obj = db.query(models.Cliente).filter(models.Cliente.identificador == cliente).first()
+    subasta_obj = db.query(models.Subasta).filter(models.Subasta.identificador == subasta).first()
+    if not cliente_obj or not subasta_obj:
+        return None, False, "no_encontrado"
+
+    nivel_cliente  = CATEGORIA_ORDER.get(cliente_obj.categoria or "comun", 0)
+    nivel_subasta  = CATEGORIA_ORDER.get(subasta_obj.categoria or "comun", 0)
+    if nivel_cliente < nivel_subasta:
+        return None, False, "categoria_insuficiente"
+
+    max_postor = db.query(func.max(models.Asistente.numeroPostor)).filter(
+        models.Asistente.subasta == subasta
+    ).scalar()
+    nuevo = models.Asistente(
+        numeroPostor=(max_postor or 0) + 1,
+        cliente=cliente,
+        subasta=subasta,
+    )
+    db.add(nuevo)
+    db.commit()
+    db.refresh(nuevo)
+    return nuevo, True, None
+
 def get_subasta_en_vivo(db: Session, subasta_id: int):
     subasta = db.query(models.Subasta).filter(models.Subasta.identificador == subasta_id).first()
     if not subasta:
@@ -736,7 +765,8 @@ def get_subasta_en_vivo(db: Session, subasta_id: int):
     max_puja = db.query(func.max(models.Pujo.importe)).filter(
         models.Pujo.item == item_actual.identificador
     ).scalar()
-    precio_actual = float(max_puja) if max_puja else float(item_actual.precioBase)
+    precio_base = float(item_actual.precioBase)
+    precio_actual = float(max_puja) if max_puja else precio_base
 
     pujas_totales = db.query(models.Pujo).filter(
         models.Pujo.item == item_actual.identificador
@@ -752,11 +782,14 @@ def get_subasta_en_vivo(db: Session, subasta_id: int):
     else:
         tiempo_restante = "00:00:00"
 
+    # Incrementos basados en el precio BASE del bien (según enunciado: 1%, 5%, 10%)
     incrementos = [
-        round(precio_actual * 0.01, 2),
-        round(precio_actual * 0.05, 2),
-        round(precio_actual * 0.10, 2),
+        round(precio_base * 0.01, 2),
+        round(precio_base * 0.05, 2),
+        round(precio_base * 0.10, 2),
     ]
+    prox_puja = round(precio_actual + incrementos[0], 2)
+    puja_maxima = round(precio_actual + precio_base * 0.20, 2)
 
     historial = (
         db.query(models.HistorialPujos)
@@ -781,10 +814,14 @@ def get_subasta_en_vivo(db: Session, subasta_id: int):
 
     return schemas.VivoSubasta(
         subastaId=subasta_id,
+        categoriaSubasta=subasta.categoria,
         productoId=item_actual.producto,
+        itemCatalogoId=item_actual.identificador,
+        precioBase=precio_base,
         titulo=pp.titulo if pp else "Sin título",
         precioActual=precio_actual,
-        proximaPuja=round(precio_actual + incrementos[0], 2),
+        proximaPuja=prox_puja,
+        pujaMaxima=puja_maxima,
         tiempoRestante=tiempo_restante,
         imagen=_get_foto_b64(db, item_actual.producto),
         pujasTotales=pujas_totales,
@@ -805,6 +842,58 @@ def create_pujo(db: Session, request: schemas.PujoRequest):
     if not item:
         return None, "item"
 
+    # F2: Validar que el usuario tenga al menos un medio de pago verificado
+    tiene_medio_verificado = db.query(models.MedioPago).filter(
+        models.MedioPago.cliente == asistente.cliente,
+        models.MedioPago.estado == "verificado"
+    ).first() is not None
+    if not tiene_medio_verificado:
+        return None, "sin_medio_verificado"
+
+    # F5: Límite de cheque certificado (aplica si el único medio verificado son cheques)
+    medios_verificados = db.query(models.MedioPago).filter(
+        models.MedioPago.cliente == asistente.cliente,
+        models.MedioPago.estado == "verificado"
+    ).all()
+    solo_cheques = medios_verificados and all(m.tipo == "cheque_certificado" for m in medios_verificados)
+    if solo_cheques:
+        ids_cheques = [m.identificador for m in medios_verificados]
+        cheques = db.query(models.mpChequeCertificado).filter(
+            models.mpChequeCertificado.medio_pago.in_(ids_cheques)
+        ).all()
+        monto_disponible = sum(float(c.monto_disponible) for c in cheques)
+        pujas_actuales = db.query(func.sum(models.Pujo.importe)).join(
+            models.Asistente, models.Pujo.asistente == models.Asistente.identificador
+        ).filter(
+            models.Asistente.cliente == asistente.cliente,
+            models.Pujo.ganador == "si"
+        ).scalar()
+        total_comprometido = float(pujas_actuales or 0) + request.importe
+        if total_comprometido > monto_disponible:
+            return None, "excede_cheque"
+
+    # Validar mínimo y máximo según enunciado (no aplica a subastas oro/platino)
+    catalogo = db.query(models.Catalogo).filter(
+        models.Catalogo.identificador == item.catalogo
+    ).first()
+    subasta_obj = db.query(models.Subasta).filter(
+        models.Subasta.identificador == catalogo.subasta
+    ).first() if catalogo else None
+    categoria_subasta = subasta_obj.categoria if subasta_obj else "comun"
+
+    if categoria_subasta not in ("oro", "platino"):
+        max_puja_actual = db.query(func.max(models.Pujo.importe)).filter(
+            models.Pujo.item == request.itemId
+        ).scalar()
+        precio_actual_val = float(max_puja_actual) if max_puja_actual else float(item.precioBase)
+        precio_base_val = float(item.precioBase)
+        minimo = round(precio_actual_val + precio_base_val * 0.01, 2)
+        maximo = round(precio_actual_val + precio_base_val * 0.20, 2)
+        if request.importe < minimo:
+            return None, "importe_bajo"
+        if request.importe > maximo:
+            return None, "importe_alto"
+
     try:
         # La puja anterior deja de ser ganadora
         db.query(models.Pujo).filter(
@@ -813,7 +902,7 @@ def create_pujo(db: Session, request: schemas.PujoRequest):
         ).update({"ganador": "no"})
 
         nuevo_pujo = models.Pujo(
-            assitente=request.asistenteId,
+            asistente=request.asistenteId,
             item=request.itemId,
             importe=request.importe,
             ganador="si",
@@ -837,7 +926,7 @@ def create_pujo(db: Session, request: schemas.PujoRequest):
 
         return schemas.PujoResponse(
             pujoId=nuevo_pujo.identificador,
-            asistenteId=nuevo_pujo.assitente,
+            asistenteId=nuevo_pujo.asistente,
             itemId=nuevo_pujo.item,
             importe=float(nuevo_pujo.importe),
             ganador=nuevo_pujo.ganador,
@@ -863,7 +952,7 @@ def get_compras(db: Session, subasta_id: int, usuario_id: int):
         return None
 
     pujos = db.query(models.Pujo).filter(
-        models.Pujo.assitente == asistente.identificador,
+        models.Pujo.asistente == asistente.identificador,
         models.Pujo.ganador == "si"
     ).all()
 
@@ -892,7 +981,7 @@ def get_precio_total(db: Session, subasta_id: int, usuario_id: int):
         return None
 
     pujos = db.query(models.Pujo).filter(
-        models.Pujo.assitente == asistente.identificador,
+        models.Pujo.asistente == asistente.identificador,
         models.Pujo.ganador == "si"
     ).all()
 

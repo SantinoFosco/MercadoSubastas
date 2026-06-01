@@ -203,7 +203,7 @@ class Pujo(Base):
     __tablename__ = "pujos"
 
     identificador = Column(Integer, primary_key=True, index=True)
-    assitente = Column(Integer, ForeignKey("asistentes.identificador"), nullable=False)
+    asistente = Column(Integer, ForeignKey("asistentes.identificador"), nullable=False)
     item = Column(Integer, ForeignKey("items_catalogo.identificador"), nullable=False)
     importe = Column(Numeric(precision=18, scale=2), nullable=False)
     ganador = Column(String, nullable=False, server_default="no")

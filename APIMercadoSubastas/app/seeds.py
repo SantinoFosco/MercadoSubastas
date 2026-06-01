@@ -145,6 +145,96 @@ def seed_subastas():
         db.close()
 
 
+def seed_usuario_prueba_2():
+    """Segundo usuario para testear pujas de múltiples postores."""
+    db = SessionLocal()
+    try:
+        if db.query(models.PersonaDetalle).filter(models.PersonaDetalle.mail == "prueba2@test.com").first():
+            return
+
+        persona = models.Persona(
+            nombre="Segundo Postor",
+            documento="88888888",
+            direccion="Av. Corrientes 1234, CABA",
+            estado="activo"
+        )
+        db.add(persona)
+        db.flush()
+
+        db.add(models.PersonaDetalle(
+            persona=persona.identificador,
+            pais=1,
+            mail="prueba2@test.com",
+            contrasenia=crud.pwd_context.hash("Prueba2."),
+            claveTemporal=False
+        ))
+
+        db.add(models.Cliente(
+            identificador=persona.identificador,
+            numeroPais=1,
+            admitido="si",
+            categoria="comun",
+            verificador=1
+        ))
+        db.flush()
+
+        medio = models.MedioPago(
+            cliente=persona.identificador,
+            tipo="tarjeta",
+            estado="verificado",
+            moneda="ARS",
+            es_internacional="no",
+            descripcion="Tarjeta de prueba"
+        )
+        db.add(medio)
+        db.flush()
+
+        db.add(models.mpTarjeta(
+            medio_pago=medio.identificador,
+            titular="Segundo Postor",
+            ultimos_4_digitos="4321",
+            vencimiento=date(2027, 12, 31),
+            marca="VISA",
+            tipo_tarjeta="credito"
+        ))
+
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise e
+    finally:
+        db.close()
+
+
+def seed_empresa():
+    """Crea el cliente 'Casa de Subastas' usado cuando nadie puja por un artículo."""
+    db = SessionLocal()
+    try:
+        if db.query(models.Persona).filter(models.Persona.documento == "00000000").first():
+            return
+        persona = models.Persona(
+            nombre="Casa de Subastas",
+            documento="00000000",
+            direccion="Sede Central",
+            estado="activo"
+        )
+        db.add(persona)
+        db.flush()
+        db.add(models.Cliente(
+            identificador=persona.identificador,
+            numeroPais=1,
+            admitido="si",
+            categoria="platino",
+            verificador=1
+        ))
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise e
+    finally:
+        db.close()
+
+
 def seed_usuario_prueba():
     db = SessionLocal()
     try:
@@ -174,6 +264,28 @@ def seed_usuario_prueba():
             admitido="si",
             categoria="comun",
             verificador=1
+        ))
+        db.flush()
+
+        # Medio de pago verificado — necesario para poder pujar (F2)
+        medio = models.MedioPago(
+            cliente=persona.identificador,
+            tipo="cuenta_bancaria",
+            estado="verificado",
+            moneda="ARS",
+            es_internacional="no",
+            descripcion="Cuenta de prueba"
+        )
+        db.add(medio)
+        db.flush()
+
+        db.add(models.mpCuentaBancaria(
+            medio_pago=medio.identificador,
+            titular="Usuario Prueba",
+            banco="Banco Nación",
+            cbu="0110012340012345678901",
+            alias="usuario.prueba",
+            pais_banco=1
         ))
 
         db.commit()

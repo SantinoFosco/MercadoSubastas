@@ -6,6 +6,7 @@ const hostUri = Constants.expoConfig?.hostUri ?? Constants.manifest?.debuggerHos
 const host = hostUri.split(':')[0];
 
 export const API_BASE_URL = `http://${host}:8000`;
+export const WS_BASE_URL  = `ws://${host}:8000`;
 
 export const API_ENDPOINTS = {
   // Auth
@@ -25,4 +26,15 @@ export const API_ENDPOINTS = {
   catalogoSubasta:  (subastaId: number | string) => `${API_BASE_URL}/subastas/${subastaId}/catalogo`,
   detalleProducto:  (subastaId: number | string, productoId: number | string) =>
                       `${API_BASE_URL}/subastas/${subastaId}/catalogo/${productoId}`,
+  // Sala de subastas — en vivo
+  subastaVivo:        (subastaId: number | string) => `${API_BASE_URL}/subasta/${subastaId}/vivo`,
+  pujar:              `${API_BASE_URL}/pujar`,
+  registrarAsistente: `${API_BASE_URL}/asistentes/registrar`,
+  wsSubasta:          (subastaId: number | string, clienteId: number | string) =>
+                        `${WS_BASE_URL}/ws/subasta/${subastaId}?clienteId=${clienteId}`,
+  // Cierre de subasta — compras del ganador
+  misCompras:         (subastaId: number | string, clienteId: number | string) =>
+                        `${API_BASE_URL}/subasta/${subastaId}/${clienteId}/compras`,
+  precioTotal:        (subastaId: number | string, clienteId: number | string) =>
+                        `${API_BASE_URL}/subasta/${subastaId}/${clienteId}/compras/precio`,
 };

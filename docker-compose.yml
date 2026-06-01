@@ -3,6 +3,7 @@ services:
   db:
     image: postgres:15
     container_name: subastas_db
+    restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -20,11 +21,14 @@ services:
   api:
     build: ./APIMercadoSubastas
     container_name: subastas_api
+    restart: unless-stopped
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     ports:
       - "8000:8000"
     environment:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/mercado_subastas
+      # Segundos sin pujas para cerrar un ítem. Bajar a 5 para testing rápido.
+      AUCTION_ITEM_TIMEOUT: ${AUCTION_ITEM_TIMEOUT:-30}
     volumes:
       - ./APIMercadoSubastas:/app
     depends_on:

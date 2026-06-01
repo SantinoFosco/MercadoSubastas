@@ -3,7 +3,7 @@ import { ActivityIndicator, Image, ScrollView, TouchableOpacity, StyleSheet, Vie
 import { Text, TextInput } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import BottomTabBar from '@/components/BottomTabBar';
 import { API_ENDPOINTS } from '@/constants/api';
 import { SessionStore } from '@/store/session';
@@ -116,7 +116,8 @@ export default function ExploracionScreen() {
     }
   }, []);
 
-  useEffect(() => { fetchHome(); }, [fetchHome]);
+  // Refresca cada vez que la pantalla recibe el foco (al volver desde subasta, perfil, etc.)
+  useFocusEffect(useCallback(() => { fetchHome(); }, [fetchHome]));
 
   const destacada = data?.subastaDestacada ?? null;
   const generales = data?.subastasGenerales ?? [];
