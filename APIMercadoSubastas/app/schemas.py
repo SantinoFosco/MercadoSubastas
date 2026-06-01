@@ -396,6 +396,20 @@ class AsistenteResponse(BaseModel):
     class Config:
         from_attributes = True
 
+#------------------ Estadísticas ---------------------------#
+
+class HistorialItemEstadisticas(BaseModel):
+    titulo: str
+    fecha: datetime
+    importe: float
+    ganada: bool
+
+class EstadisticasCliente(BaseModel):
+    subastasTotales: int
+    pujasGanadas: int
+    totalInvertido: float
+    historial: list[HistorialItemEstadisticas]
+
 #------------------ Ventas ---------------------------------#
 
 #------------------ Informacion Necesaria ------------------#

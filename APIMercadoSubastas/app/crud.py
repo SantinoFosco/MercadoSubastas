@@ -951,6 +951,62 @@ def confirmar_pago(db: Session, subasta_id: int, usuario_id: int, metodo_pago_id
 
     return "Pago confirmado correctamente", None
 
+#------------------ Estadísticas ---------------------------#
+
+def get_estadisticas_cliente(db: Session, cliente_id: int):
+    from sqlalchemy import func as sqlfunc
+
+    subastas_totales = (
+        db.query(models.HistorialPujos.subasta)
+        .filter(models.HistorialPujos.cliente == cliente_id)
+        .distinct()
+        .count()
+    )
+
+    total_invertido_result = db.query(sqlfunc.sum(models.RegistroSubasta.importe)).filter(
+        models.RegistroSubasta.cliente == cliente_id
+    ).scalar()
+    total_invertido = float(total_invertido_result) if total_invertido_result else 0.0
+
+    asistente_ids = [
+        a.identificador
+        for a in db.query(models.Asistente).filter(models.Asistente.cliente == cliente_id).all()
+    ]
+    pujas_ganadas = (
+        db.query(models.Pujo)
+        .filter(models.Pujo.assitente.in_(asistente_ids), models.Pujo.ganador == "si")
+        .count()
+    ) if asistente_ids else 0
+
+    historial_rows = (
+        db.query(models.HistorialPujos)
+        .filter(models.HistorialPujos.cliente == cliente_id)
+        .order_by(models.HistorialPujos.fechaHora.desc())
+        .limit(10)
+        .all()
+    )
+
+    historial = []
+    for h in historial_rows:
+        item = db.query(models.ItemCatalogo).filter(models.ItemCatalogo.identificador == h.itemCatalogo).first()
+        pp = db.query(models.ProductoPresentacion).filter(
+            models.ProductoPresentacion.producto == item.producto
+        ).first() if item else None
+        pujo = db.query(models.Pujo).filter(models.Pujo.identificador == h.pujo).first()
+        historial.append(schemas.HistorialItemEstadisticas(
+            titulo=pp.titulo if pp else "Producto desconocido",
+            fecha=h.fechaHora,
+            importe=float(h.importe),
+            ganada=pujo.ganador == "si" if pujo else False,
+        ))
+
+    return schemas.EstadisticasCliente(
+        subastasTotales=subastas_totales,
+        pujasGanadas=pujas_ganadas,
+        totalInvertido=total_invertido,
+        historial=historial,
+    )
+
 #------------------ Personas -------------------------------#
 
 def create_sector(db: Session, request: schemas.SectorCreate):

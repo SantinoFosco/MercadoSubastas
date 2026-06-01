@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from . import crud, models, schemas
 from .database import SessionLocal, engine
 from .dev_router import router as dev_router
-from .seeds import seed_paises, seed_empleados, seed_subastas, seed_subastas_categorias, seed_usuario_prueba
+from .seeds import seed_paises, seed_empleados, seed_subastas, seed_subastas_categorias, seed_usuario_prueba, seed_historial_prueba
 
 # Crea las tablas si no existen
 models.Base.metadata.create_all(bind=engine)
@@ -15,6 +15,7 @@ seed_empleados()
 seed_subastas()
 seed_subastas_categorias()
 seed_usuario_prueba()
+seed_historial_prueba()
 
 app = FastAPI()
 
@@ -367,6 +368,10 @@ def get_clientes(db: Session = Depends(get_db)):
 @app.post("/clientes/", response_model=schemas.ClienteResponse)
 def create_cliente(request: schemas.ClienteCreate, db: Session = Depends(get_db)):
     return crud.create_cliente(db=db, request=request)
+
+@app.get("/clientes/{cliente_id}/estadisticas", response_model=schemas.EstadisticasCliente)
+def get_estadisticas_cliente(cliente_id: int, db: Session = Depends(get_db)):
+    return crud.get_estadisticas_cliente(db=db, cliente_id=cliente_id)
 
 @app.get("/clientes/{cliente_id}", response_model=schemas.ClienteResponse)
 def get_cliente(cliente_id: int, db: Session = Depends(get_db)):

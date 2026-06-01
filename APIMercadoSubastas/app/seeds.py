@@ -1,4 +1,4 @@
-from datetime import date, time, timedelta
+from datetime import date, time, timedelta, datetime
 from . import crud, models
 from .database import SessionLocal
 
@@ -336,6 +336,103 @@ def seed_usuario_prueba():
             categoria="comun",
             verificador=1
         ))
+
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise e
+    finally:
+        db.close()
+
+
+def seed_historial_prueba():
+    db = SessionLocal()
+    try:
+        usuario = db.query(models.PersonaDetalle).filter(
+            models.PersonaDetalle.mail == "prueba@test.com"
+        ).first()
+        if not usuario:
+            return
+
+        cliente_id = usuario.persona
+
+        if db.query(models.Asistente).filter(models.Asistente.cliente == cliente_id).first():
+            return
+
+        subastas = db.query(models.Subasta).order_by(models.Subasta.identificador).all()
+        if len(subastas) < 2:
+            return
+
+        subasta_1, subasta_2 = subastas[0], subastas[1]
+
+        def items_de_subasta(subasta_id):
+            return (
+                db.query(models.ItemCatalogo)
+                .join(models.Catalogo, models.ItemCatalogo.catalogo == models.Catalogo.identificador)
+                .filter(models.Catalogo.subasta == subasta_id)
+                .all()
+            )
+
+        items_s1 = items_de_subasta(subasta_1.identificador)
+        items_s2 = items_de_subasta(subasta_2.identificador)
+
+        asistente_1 = models.Asistente(numeroPostor=10, cliente=cliente_id, subasta=subasta_1.identificador)
+        asistente_2 = models.Asistente(numeroPostor=5,  cliente=cliente_id, subasta=subasta_2.identificador)
+        db.add(asistente_1)
+        db.add(asistente_2)
+        db.flush()
+
+        for i, item in enumerate(items_s1):
+            ganador = "si" if i == 0 else "no"
+            importe = round(float(item.precioBase) * 1.2, 2)
+            pujo = models.Pujo(assitente=asistente_1.identificador, item=item.identificador, importe=importe, ganador=ganador)
+            db.add(pujo)
+            db.flush()
+            db.add(models.HistorialPujos(
+                pujo=pujo.identificador,
+                asistente=asistente_1.identificador,
+                itemCatalogo=item.identificador,
+                cliente=cliente_id,
+                subasta=subasta_1.identificador,
+                importe=importe,
+                fechaHora=datetime.now() - timedelta(days=20 - i),
+            ))
+            if ganador == "si":
+                producto = db.query(models.Producto).filter(models.Producto.identificador == item.producto).first()
+                db.add(models.RegistroSubasta(
+                    subasta=subasta_1.identificador,
+                    duenio=producto.duenio,
+                    producto=item.producto,
+                    cliente=cliente_id,
+                    importe=importe,
+                    comision=float(item.comision),
+                ))
+
+        for i, item in enumerate(items_s2):
+            ganador = "si" if i == 1 else "no"
+            importe = round(float(item.precioBase) * 1.15, 2)
+            pujo = models.Pujo(assitente=asistente_2.identificador, item=item.identificador, importe=importe, ganador=ganador)
+            db.add(pujo)
+            db.flush()
+            db.add(models.HistorialPujos(
+                pujo=pujo.identificador,
+                asistente=asistente_2.identificador,
+                itemCatalogo=item.identificador,
+                cliente=cliente_id,
+                subasta=subasta_2.identificador,
+                importe=importe,
+                fechaHora=datetime.now() - timedelta(days=5 - i),
+            ))
+            if ganador == "si":
+                producto = db.query(models.Producto).filter(models.Producto.identificador == item.producto).first()
+                db.add(models.RegistroSubasta(
+                    subasta=subasta_2.identificador,
+                    duenio=producto.duenio,
+                    producto=item.producto,
+                    cliente=cliente_id,
+                    importe=importe,
+                    comision=float(item.comision),
+                ))
 
         db.commit()
     except Exception as e:

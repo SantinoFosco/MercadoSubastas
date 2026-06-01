@@ -26,6 +26,7 @@ export const API_ENDPOINTS = {
   detalleProducto:  (subastaId: number | string, productoId: number | string) =>
                       `${API_BASE_URL}/subastas/${subastaId}/catalogo/${productoId}`,
   // Perfil
-  clienteDetalle:   (id: number | string) => `${API_BASE_URL}/clientes/${id}`,
-  paisDetalle:      (numero: number | string) => `${API_BASE_URL}/paises/${numero}`,
+  clienteDetalle:        (id: number | string) => `${API_BASE_URL}/clientes/${id}`,
+  paisDetalle:           (numero: number | string) => `${API_BASE_URL}/paises/${numero}`,
+  estadisticasCliente:   (id: number | string) => `${API_BASE_URL}/clientes/${id}/estadisticas`,
 };
