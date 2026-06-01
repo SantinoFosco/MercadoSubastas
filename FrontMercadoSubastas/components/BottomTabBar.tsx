@@ -2,6 +2,7 @@ import React from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 
 type TabKey = 'explorar' | 'mis-pujas' | 'vender' | 'perfil';
 
@@ -17,7 +18,23 @@ const tabs: { key: TabKey; label: string; icon: string }[] = [
   { key: 'perfil', label: 'Perfil', icon: 'account-outline' },
 ];
 
+const TAB_ROUTES: Record<TabKey, string> = {
+  'explorar':  '/exploracion',
+  'mis-pujas': '/mis-pujas',
+  'vender':    '/vender',
+  'perfil':    '/perfil',
+};
+
 export default function BottomTabBar({ activeTab = 'mis-pujas', onTabPress }: BottomTabBarProps) {
+  const router = useRouter();
+
+  function handleTabPress(tab: TabKey) {
+    onTabPress?.(tab);
+    if (tab !== activeTab) {
+      router.push(TAB_ROUTES[tab] as any);
+    }
+  }
+
   return (
     <View style={styles.container}>
       {tabs.map((tab) => {
@@ -26,7 +43,7 @@ export default function BottomTabBar({ activeTab = 'mis-pujas', onTabPress }: Bo
           <TouchableOpacity
             key={tab.key}
             style={styles.tab}
-            onPress={() => onTabPress?.(tab.key)}
+            onPress={() => handleTabPress(tab.key)}
             activeOpacity={0.7}
           >
             {isActive ? (

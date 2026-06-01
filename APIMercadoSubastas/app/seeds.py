@@ -145,6 +145,167 @@ def seed_subastas():
         db.close()
 
 
+def seed_subastas_categorias():
+    db = SessionLocal()
+    try:
+        if db.query(models.Persona).filter(models.Persona.documento == "00000003").first():
+            return
+
+        # Reusar el dueño existente o crear uno nuevo
+        p_due = db.query(models.Persona).filter(models.Persona.documento == "00000002").first()
+        if not p_due:
+            p_due = models.Persona(nombre="Duenio Prueba 2", documento="00000003", direccion="Av. Rivadavia 3000, CABA", estado="activo")
+            db.add(p_due)
+            db.flush()
+            db.add(models.Duenio(identificador=p_due.identificador, numeroPais=1, verificador=1))
+            db.flush()
+        duenio_id = p_due.identificador
+
+        p_sub = db.query(models.Persona).filter(models.Persona.documento == "00000001").first()
+        if not p_sub:
+            p_sub = models.Persona(nombre="Subastador Prueba 2", documento="00000003", direccion="Mitre 500, CABA", estado="activo")
+            db.add(p_sub)
+            db.flush()
+            db.add(models.Subastador(identificador=p_sub.identificador, matricula="MAT-002", region="Buenos Aires"))
+            db.flush()
+        subastador_id = db.query(models.Subastador).filter(models.Subastador.identificador == p_sub.identificador).first().identificador
+
+        hoy = date.today()
+
+        datos_categorias = [
+            ("especial", [
+                {
+                    "subasta": {"fecha": hoy + timedelta(days=10), "hora": time(14, 0), "ubicacion": "Sala Especial A, Av. Cabildo 100, CABA", "capacidad": 80},
+                    "catalogo": "Subasta Especial — Lote A",
+                    "productos": [
+                        ("Broche victoriano en oro", "Broche victoriano en oro 18k con diamantes de corte antiguo, circa 1880, pieza única de joyería fina.", "Joyería", "Reino Unido", 200000, 12),
+                        ("Telescopio refractor siglo XIX", "Telescopio refractor de latón, circa 1870, fabricante inglés, longitud 90 cm, con trípode de madera original.", "Instrumentos", "Reino Unido", 175000, 10),
+                    ]
+                },
+                {
+                    "subasta": {"fecha": hoy + timedelta(days=20), "hora": time(16, 0), "ubicacion": "Sala Especial B, Florida 550, CABA", "capacidad": 60},
+                    "catalogo": "Subasta Especial — Lote B",
+                    "productos": [
+                        ("Mapa grabado siglo XVIII", "Mapa grabado en cobre de América del Sur, circa 1750, iluminado a mano, excelente estado de conservación, 60x45 cm.", "Cartografía", "Francia", 130000, 10),
+                        ("Abanico de nácar y seda", "Abanico de nácar tallado con varillas de seda bordada, estilo Belle Époque, circa 1900, estuche original incluido.", "Accesorios", "España", 95000, 8),
+                    ]
+                },
+            ]),
+            ("plata", [
+                {
+                    "subasta": {"fecha": hoy + timedelta(days=12), "hora": time(11, 0), "ubicacion": "Salón Plata, Posadas 1200, CABA", "capacidad": 50},
+                    "catalogo": "Subasta Plata — Lote A",
+                    "productos": [
+                        ("Escultura bronce Art Déco", "Escultura en bronce patinado, estilo Art Déco, figura femenina danzante, circa 1925, altura 55 cm, base de mármol negro.", "Escultura", "Francia", 450000, 14),
+                        ("Piano de cola Bösendorfer 1910", "Piano de cola Bösendorfer, modelo 170, fabricado en Viena circa 1910, restaurado profesionalmente, madera de palosanto.", "Instrumentos Musicales", "Austria", 1800000, 15),
+                    ]
+                },
+                {
+                    "subasta": {"fecha": hoy + timedelta(days=25), "hora": time(18, 0), "ubicacion": "Galería Sur, Defensa 1000, CABA", "capacidad": 40},
+                    "catalogo": "Subasta Plata — Lote B",
+                    "productos": [
+                        ("Tapiz flamenco siglo XVI", "Tapiz tejido en lana y seda, escuela flamenca, siglo XVI, escena de caza, 320x240 cm, restaurado.", "Textiles", "Bélgica", 620000, 13),
+                        ("Vajilla plata Sterling completa", "Vajilla Sterling de 48 piezas, casa Christofle, Francia circa 1930, grabado heráldico, estuche de madera original.", "Platería", "Francia", 380000, 12),
+                    ]
+                },
+            ]),
+            ("oro", [
+                {
+                    "subasta": {"fecha": hoy + timedelta(days=15), "hora": time(15, 0), "ubicacion": "Suite Oro, Alvear Palace Hotel, CABA", "capacidad": 30},
+                    "catalogo": "Subasta Oro — Lote A",
+                    "productos": [
+                        ("Collar diamantes Belle Époque", "Collar en platino con 48 diamantes talla brillante, peso total 12 ct, circa 1905, certificado GIA, estuche Cartier.", "Alta Joyería", "Francia", 3500000, 18),
+                        ("Manuscrito iluminado medieval", "Manuscrito iluminado en vitela, siglo XIV, 120 páginas, miniaturas en oro y pigmentos naturales, encuadernación original.", "Libros y Manuscritos", "Italia", 2800000, 16),
+                    ]
+                },
+                {
+                    "subasta": {"fecha": hoy + timedelta(days=35), "hora": time(12, 0), "ubicacion": "Sala Premium, Arroyo 841, CABA", "capacidad": 25},
+                    "catalogo": "Subasta Oro — Lote B",
+                    "productos": [
+                        ("Automóvil Bugatti Type 35 1927", "Bugatti Type 35, 1927, restauración completa certificada, color azul Bugatti, motor 2.3L superalimentado, 7 victorias documentadas.", "Automóviles Clásicos", "Francia", 12000000, 20),
+                        ("Reloj Patek Philippe ref. 2499", "Patek Philippe ref. 2499, calendario perpetuo cronógrafo, oro rosa 18k, circa 1960, caja y documentación originales.", "Relojería", "Suiza", 9500000, 18),
+                    ]
+                },
+            ]),
+            ("platino", [
+                {
+                    "subasta": {"fecha": hoy + timedelta(days=8), "hora": time(20, 0), "ubicacion": "Penthouse Exclusivo, Puerto Madero, CABA", "capacidad": 15},
+                    "catalogo": "Subasta Platino — Lote A",
+                    "productos": [
+                        ("Obra Picasso — Período Azul", "Óleo sobre lienzo, Pablo Picasso, circa 1903, período azul, autenticado por el Musée Picasso París, certificado de procedencia completo, 95x75 cm.", "Pintura Moderna", "España", 85000000, 25),
+                        ("Diamante azul — 18 quilates", "Diamante azul fancy vivid, talla cojín, 18.02 ct, certificado GIA FL, subastado anteriormente en Christie's Ginebra.", "Gemas", "Sudáfrica", 120000000, 22),
+                    ]
+                },
+                {
+                    "subasta": {"fecha": hoy + timedelta(days=40), "hora": time(19, 0), "ubicacion": "Sala Bóveda, Banco Ciudad Sede Central, CABA", "capacidad": 10},
+                    "catalogo": "Subasta Platino — Lote B",
+                    "productos": [
+                        ("Stradivarius — violín Il Cremonese", "Violín Antonio Stradivari, 1715, modelo Il Cremonese, restaurado por taller Beare Londres, con certificado de autenticidad y estuche de viaje.", "Instrumentos Musicales", "Italia", 95000000, 24),
+                        ("Colección vinos Romanée-Conti 1945", "Colección de 12 botellas Domaine de la Romanée-Conti, cosecha 1945, almacenaje continuo certificado desde bodega de origen.", "Vinos y Espirituosos", "Francia", 50000000, 20),
+                    ]
+                },
+            ]),
+        ]
+
+        for categoria, lotes in datos_categorias:
+            for lote in lotes:
+                sd = lote["subasta"]
+                subasta = models.Subasta(
+                    fecha=sd["fecha"],
+                    hora=sd["hora"],
+                    estado="abierta",
+                    subastador=subastador_id,
+                    ubicacion=sd["ubicacion"],
+                    capacidadAsistentes=sd["capacidad"],
+                    tieneDeposito="si",
+                    seguridadPropia="si",
+                    categoria=categoria
+                )
+                db.add(subasta)
+                db.flush()
+
+                catalogo = models.Catalogo(descripcion=lote["catalogo"], subasta=subasta.identificador, responsable=1)
+                db.add(catalogo)
+                db.flush()
+
+                for desc_corta, desc_larga, cat_pp, procedencia, precio, comision in lote["productos"]:
+                    producto = models.Producto(
+                        descripcionCatalogo=desc_corta,
+                        descripcionCompleta=desc_larga,
+                        revisor=1,
+                        duenio=duenio_id,
+                        disponible="si"
+                    )
+                    db.add(producto)
+                    db.flush()
+
+                    db.add(models.ProductoPresentacion(
+                        producto=producto.identificador,
+                        titulo=desc_corta,
+                        categoria=cat_pp,
+                        procedencia=procedencia,
+                        declaracionLegal="si",
+                        estado="publicado"
+                    ))
+
+                    db.add(models.ItemCatalogo(
+                        catalogo=catalogo.identificador,
+                        producto=producto.identificador,
+                        precioBase=precio,
+                        comision=comision,
+                        subastado="no"
+                    ))
+
+                db.flush()
+
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise e
+    finally:
+        db.close()
+
+
 def seed_usuario_prueba():
     db = SessionLocal()
     try:

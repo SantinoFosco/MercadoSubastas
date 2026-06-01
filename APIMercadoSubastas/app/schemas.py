@@ -22,6 +22,7 @@ class MensajeResponse(BaseModel):
 
 class RegistroVerificacionRequest(BaseModel):
     mail: EmailStr
+    categoria: str
     verificador: int
 
 class RegistroEstadoResponse(BaseModel):

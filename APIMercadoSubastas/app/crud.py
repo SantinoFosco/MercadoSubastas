@@ -70,7 +70,7 @@ def aprobar_registro(db: Session, request: schemas.RegistroVerificacionRequest):
         identificador = persona.identificador,
         numeroPais=persona_detalle.pais,
         admitido="si",
-        categoria=random.choice(categorias),
+        categoria=request.categoria if request.categoria in categorias else "comun",
         verificador=request.verificador
     )
 
@@ -537,9 +537,14 @@ def _get_foto_b64(db: Session, producto_id: int) -> str | None:
 def get_home(db: Session, categoria: str) -> schemas.HomeResponse:
     ahora = datetime.now()
 
+    jerarquia = ["comun", "especial", "plata", "oro", "platino"]
+    cat = categoria.lower()
+    nivel = jerarquia.index(cat) if cat in jerarquia else 0
+    categorias_permitidas = jerarquia[:nivel + 1]
+
     candidatas = db.query(models.Subasta).filter(
         models.Subasta.estado == "abierta",
-        models.Subasta.categoria == categoria.lower()
+        models.Subasta.categoria.in_(categorias_permitidas)
     ).order_by(models.Subasta.fecha).all()
 
     # Solo incluir subastas que aún no terminaron: en vivo o futuras

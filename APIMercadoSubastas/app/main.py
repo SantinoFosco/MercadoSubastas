@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from . import crud, models, schemas
 from .database import SessionLocal, engine
 from .dev_router import router as dev_router
-from .seeds import seed_paises, seed_empleados, seed_subastas, seed_usuario_prueba
+from .seeds import seed_paises, seed_empleados, seed_subastas, seed_subastas_categorias, seed_usuario_prueba
 
 # Crea las tablas si no existen
 models.Base.metadata.create_all(bind=engine)
@@ -13,6 +13,7 @@ models.Base.metadata.create_all(bind=engine)
 seed_paises()
 seed_empleados()
 seed_subastas()
+seed_subastas_categorias()
 seed_usuario_prueba()
 
 app = FastAPI()
