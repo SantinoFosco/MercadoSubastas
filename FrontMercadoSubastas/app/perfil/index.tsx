@@ -1,65 +1,102 @@
-import React, { useState } from 'react';
-import { View, ScrollView, StyleSheet, Pressable, TextInput } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, Pressable, View } from 'react-native';
 import { Text } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import BottomTabBar from '@/components/BottomTabBar';
+import { SessionStore } from '@/store/session';
+import { API_ENDPOINTS } from '@/constants/api';
 
-// ─── Component ───────────────────────────────────────────────────────
+type ProfileData = {
+  nombre: string;
+  correo: string;
+  categoria: string;
+  pais: string;
+};
+
+const CATEGORIA_LABEL: Record<string, string> = {
+  comun: 'Común',
+  especial: 'Especial',
+  plata: 'Plata',
+  oro: 'Oro',
+  platino: 'Platino',
+};
 
 export default function PerfilScreen() {
   const router = useRouter();
+  const [profile, setProfile] = useState<ProfileData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  // ─── Editable state ──────────────────────────────────────────────
-  const [isEditing, setIsEditing] = useState(false);
-  const [nombre, setNombre] = useState('Bautista Damian');
-  const [correo, setCorreo] = useState('bautista@uade.edu.ar');
-  const [dni, setDni] = useState('45.984.323');
-  const [pais, setPais] = useState('Argentina');
-  const [direccion, setDireccion] = useState('Lamadrid 733');
+  useEffect(() => {
+    async function fetchProfile() {
+      const session = SessionStore.get();
+      if (!session) {
+        router.replace('/sign-in');
+        return;
+      }
 
-  const fields = [
-    { label: 'NOMBRE COMPLETO', value: nombre, setter: setNombre },
-    { label: 'CORREO ELECTRÓNICO', value: correo, setter: setCorreo, keyboard: 'email-address' as const },
-    { label: 'DNI', value: dni, setter: setDni },
-    { label: 'PAÍS', value: pais, setter: setPais },
-    { label: 'DIRECCIÓN DE ENVÍO', value: direccion, setter: setDireccion },
-  ];
+      try {
+        const clienteRes = await fetch(API_ENDPOINTS.clienteDetalle(session.identificador));
+        if (!clienteRes.ok) throw new Error('Error al obtener perfil');
+        const clienteData = await clienteRes.json();
 
-  // ─── Handlers ──────────────────────────────────────────────────────
-  const handleEditToggle = () => {
-    setIsEditing(!isEditing);
-  };
+        let paisNombre = '-';
+        if (clienteData.numeroPais) {
+          const paisRes = await fetch(API_ENDPOINTS.paisDetalle(clienteData.numeroPais));
+          if (paisRes.ok) {
+            const paisData = await paisRes.json();
+            paisNombre = paisData.nombre;
+          }
+        }
+
+        setProfile({
+          nombre: session.nombre,
+          correo: session.mail,
+          categoria: CATEGORIA_LABEL[session.categoria] ?? session.categoria,
+          pais: paisNombre,
+        });
+      } catch {
+        setError('No se pudo cargar el perfil.');
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchProfile();
+  }, []);
 
   const handleTabPress = (tab: string) => {
     switch (tab) {
-      case 'explorar':
-        router.push('/exploracion');
-        break;
-      case 'vender':
-        router.push('/vender');
-        break;
-      case 'perfil':
-        break;
-      case 'mis-pujas':
-        break;
+      case 'explorar': router.push('/exploracion'); break;
+      case 'vender': router.push('/vender'); break;
+      case 'perfil': break;
+      case 'mis-pujas': break;
     }
   };
 
   const handleLogout = () => {
-    router.push('/login');
+    SessionStore.clear();
+    router.replace('/sign-in');
   };
+
+  const fields = profile
+    ? [
+        { label: 'NOMBRE COMPLETO', value: profile.nombre },
+        { label: 'CORREO ELECTRÓNICO', value: profile.correo },
+        { label: 'CATEGORÍA', value: profile.categoria },
+        { label: 'PAÍS', value: profile.pais },
+      ]
+    : [];
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* ─── Scrollable Content ──────────────────────────────────── */}
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* ─── Section Title ─────────────────────────────────────── */}
         <Text style={styles.sectionTitle}>Perfil</Text>
 
         {/* ─── Profile Photo Section ─────────────────────────────── */}
@@ -68,55 +105,29 @@ export default function PerfilScreen() {
             <View style={styles.avatarCircle}>
               <MaterialCommunityIcons name="account" size={60} color="#CCCCCC" />
             </View>
-            {/* Edit button overlay */}
-            <Pressable style={styles.editPhotoButton}>
-              <MaterialCommunityIcons name="pencil" size={16} color="#FFFFFF" />
-            </Pressable>
           </View>
-          <Text style={styles.profileName}>Alejandro Sanz</Text>
+          <Text style={styles.profileName}>{profile?.nombre ?? '...'}</Text>
         </View>
 
         {/* ─── Personal Information Card ─────────────────────────── */}
         <View style={styles.card}>
-          {/* Card Header */}
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>Información Personal</Text>
-            <Pressable onPress={handleEditToggle}>
-              <Text style={styles.editLink}>
-                {isEditing ? 'Cancelar' : 'Editar Perfil'}
-              </Text>
-            </Pressable>
           </View>
 
-          {/* Info Fields */}
-          {fields.map((field, index) => (
-            <View key={index}>
-              <Text style={styles.fieldLabel}>{field.label}</Text>
-              {isEditing ? (
-                <TextInput
-                  style={styles.fieldInput}
-                  value={field.value}
-                  onChangeText={field.setter}
-                  placeholderTextColor="#999"
-                  keyboardType={field.keyboard || 'default'}
-                />
-              ) : (
+          {loading ? (
+            <ActivityIndicator color="#FFD700" style={styles.loader} />
+          ) : error ? (
+            <Text style={styles.errorText}>{error}</Text>
+          ) : (
+            fields.map((field, index) => (
+              <View key={index}>
+                <Text style={styles.fieldLabel}>{field.label}</Text>
                 <View style={styles.fieldValueContainer}>
                   <Text style={styles.fieldValue}>{field.value}</Text>
                 </View>
-              )}
-            </View>
-          ))}
-
-          {/* Guardar button — only visible when editing */}
-          {isEditing && (
-            <Pressable
-              style={styles.saveButton}
-              onPress={() => setIsEditing(false)}
-            >
-              <MaterialCommunityIcons name="check" size={18} color="#FFFFFF" />
-              <Text style={styles.saveButtonText}>Guardar Cambios</Text>
-            </Pressable>
+              </View>
+            ))
           )}
         </View>
 
@@ -144,13 +155,12 @@ export default function PerfilScreen() {
         </Pressable>
       </ScrollView>
 
-      {/* ─── Bottom Tab Bar (fixed at bottom) ────────────────────── */}
       <BottomTabBar activeTab="perfil" onTabPress={handleTabPress} />
     </SafeAreaView>
   );
 }
 
-// ─── Styles ────────────────────────────────────────────────────────────
+// ─── Styles ────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -163,7 +173,6 @@ const styles = StyleSheet.create({
     paddingBottom: 32,
   },
 
-  // ─── Section Title ─────────────────────────────────────────────────
   sectionTitle: {
     fontSize: 14,
     fontWeight: '600',
@@ -173,13 +182,11 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
 
-  // ─── Avatar Section ────────────────────────────────────────────────
   avatarSection: {
     alignItems: 'center',
     marginTop: 24,
   },
   avatarContainer: {
-    position: 'relative',
     width: 120,
     height: 120,
   },
@@ -191,17 +198,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  editPhotoButton: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#FFD700',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   profileName: {
     fontSize: 22,
     fontWeight: '800',
@@ -210,7 +206,6 @@ const styles = StyleSheet.create({
     marginTop: 14,
   },
 
-  // ─── Personal Information Card ─────────────────────────────────────
   card: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
@@ -230,13 +225,18 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#1A1A1A',
   },
-  editLink: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#8A6D3B',
+
+  loader: {
+    marginTop: 24,
+    marginBottom: 8,
+  },
+  errorText: {
+    marginTop: 16,
+    fontSize: 14,
+    color: '#D32F2F',
+    textAlign: 'center',
   },
 
-  // ─── Info Fields (read-only) ──────────────────────────────────────
   fieldLabel: {
     fontSize: 10,
     fontWeight: '700',
@@ -260,37 +260,6 @@ const styles = StyleSheet.create({
     color: '#1A1A1A',
   },
 
-  // ─── Info Fields (editable) ───────────────────────────────────────
-  fieldInput: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderWidth: 1.5,
-    borderColor: '#FFD700',
-    fontSize: 15,
-    fontWeight: '500',
-    color: '#1A1A1A',
-  },
-
-  // ─── Save Button ──────────────────────────────────────────────────
-  saveButton: {
-    backgroundColor: '#FFD700',
-    height: 50,
-    borderRadius: 12,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 20,
-    gap: 8,
-  },
-  saveButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 15,
-  },
-
-  // ─── Stats Button ─────────────────────────────────────────────────
   statsButton: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
@@ -327,7 +296,6 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
-  // ─── Logout Button ────────────────────────────────────────────────
   logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
