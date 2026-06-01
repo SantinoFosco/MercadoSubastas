@@ -120,7 +120,6 @@ class Subasta(Base):
     categoria = Column(String, nullable=True, server_default="comun")
 
     __table_args__ = (
-        CheckConstraint("fecha > (CURRENT_DATE + INTERVAL '10 days')", name="chkFecha"),
         CheckConstraint("estado IN ('abierta', 'cerrada')", name="chkEstado"),
         CheckConstraint("\"tieneDeposito\" IN ('si', 'no')", name="chkTD"),
         CheckConstraint("\"seguridadPropia\" IN ('si', 'no')", name="chkSP"),
