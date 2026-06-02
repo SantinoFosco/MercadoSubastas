@@ -396,6 +396,31 @@ class AsistenteResponse(BaseModel):
     class Config:
         from_attributes = True
 
+#------------------ Vender ---------------------------------#
+
+class ArticuloSubmitRequest(BaseModel):
+    titulo: str
+    categoria: str
+    descripcionCompleta: str
+    procedencia: Optional[str] = None
+    declaracionLegal: bool = False
+    clienteId: int
+
+class ArticuloSubmitResponse(BaseModel):
+    productoId: int
+    presentacionId: int
+    mensaje: str
+
+class ArticuloListItem(BaseModel):
+    productoId: int
+    presentacionId: int
+    titulo: str
+    categoria: str
+    fechaEnvio: Optional[date]
+    estadoInspeccion: str
+    observaciones: Optional[str]
+    enSubasta: bool
+
 #------------------ Estadísticas ---------------------------#
 
 class HistorialItemEstadisticas(BaseModel):

@@ -369,6 +369,17 @@ def get_clientes(db: Session = Depends(get_db)):
 def create_cliente(request: schemas.ClienteCreate, db: Session = Depends(get_db)):
     return crud.create_cliente(db=db, request=request)
 
+@app.post("/articulos/", response_model=schemas.ArticuloSubmitResponse)
+def submit_articulo(request: schemas.ArticuloSubmitRequest, db: Session = Depends(get_db)):
+    cliente = crud.get_cliente(db=db, cliente_id=request.clienteId)
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+    return crud.submit_articulo(db=db, request=request)
+
+@app.get("/clientes/{cliente_id}/articulos", response_model=list[schemas.ArticuloListItem])
+def get_articulos_cliente(cliente_id: int, db: Session = Depends(get_db)):
+    return crud.get_articulos_cliente(db=db, cliente_id=cliente_id)
+
 @app.get("/clientes/{cliente_id}/estadisticas", response_model=schemas.EstadisticasCliente)
 def get_estadisticas_cliente(cliente_id: int, db: Session = Depends(get_db)):
     return crud.get_estadisticas_cliente(db=db, cliente_id=cliente_id)

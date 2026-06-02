@@ -1,5 +1,5 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import React from 'react';
 import {
   Image,
@@ -16,6 +16,7 @@ import BottomTabBar from '@/components/BottomTabBar';
 
 export default function ArticuloAprobadoScreen() {
   const router = useRouter();
+  const { titulo, categoria } = useLocalSearchParams<{ titulo: string; categoria: string }>();
 
   return (
     <SafeAreaView style={styles.container}>
@@ -58,8 +59,8 @@ export default function ArticuloAprobadoScreen() {
 
           {/* Product info */}
           <View style={styles.productInfo}>
-            <Text style={styles.productCategory}>CATEGORÍA: ELECTRÓNICA</Text>
-            <Text style={styles.productTitle}>Auriculares profesionales</Text>
+            <Text style={styles.productCategory}>CATEGORÍA: {(categoria ?? '').toUpperCase()}</Text>
+            <Text style={styles.productTitle}>{titulo ?? 'Artículo'}</Text>
           </View>
         </View>
 
@@ -84,7 +85,7 @@ export default function ArticuloAprobadoScreen() {
         <TouchableOpacity
           style={styles.ctaButton}
           activeOpacity={0.85}
-          onPress={() => router.push('/vender/ubicacion-seguro')}
+          onPress={() => router.push({ pathname: '/vender/ubicacion-seguro', params: { titulo } })}
         >
           <Text style={styles.ctaButtonText}>Aceptar y Continuar →</Text>
         </TouchableOpacity>

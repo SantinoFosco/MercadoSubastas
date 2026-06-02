@@ -951,6 +951,74 @@ def confirmar_pago(db: Session, subasta_id: int, usuario_id: int, metodo_pago_id
 
     return "Pago confirmado correctamente", None
 
+#------------------ Vender ---------------------------------#
+
+def submit_articulo(db: Session, request: schemas.ArticuloSubmitRequest):
+    duenio = db.query(models.Duenio).filter(models.Duenio.identificador == request.clienteId).first()
+    if not duenio:
+        duenio = models.Duenio(identificador=request.clienteId, numeroPais=None, verificador=1)
+        db.add(duenio)
+        db.flush()
+
+    producto = models.Producto(
+        descripcionCatalogo=request.titulo[:100],
+        descripcionCompleta=request.descripcionCompleta,
+        revisor=1,
+        duenio=duenio.identificador,
+        disponible="si",
+    )
+    db.add(producto)
+    db.flush()
+
+    presentacion = models.ProductoPresentacion(
+        producto=producto.identificador,
+        titulo=request.titulo,
+        categoria=request.categoria,
+        procedencia=request.procedencia,
+        declaracionLegal="si" if request.declaracionLegal else "no",
+        estado="publicado",
+    )
+    db.add(presentacion)
+    db.flush()
+
+    db.add(models.InspeccionProducto(
+        producto=producto.identificador,
+        estado="pendiente",
+    ))
+    db.commit()
+
+    return schemas.ArticuloSubmitResponse(
+        productoId=producto.identificador,
+        presentacionId=presentacion.identificador,
+        mensaje="Artículo enviado exitosamente. Estará en revisión a la brevedad.",
+    )
+
+def get_articulos_cliente(db: Session, cliente_id: int):
+    productos = db.query(models.Producto).filter(models.Producto.duenio == cliente_id).all()
+    result = []
+    for producto in productos:
+        pp = db.query(models.ProductoPresentacion).filter(
+            models.ProductoPresentacion.producto == producto.identificador
+        ).first()
+        inspeccion = db.query(models.InspeccionProducto).filter(
+            models.InspeccionProducto.producto == producto.identificador
+        ).first()
+        en_subasta = db.query(models.ItemCatalogo).filter(
+            models.ItemCatalogo.producto == producto.identificador,
+            models.ItemCatalogo.subastado == "si",
+        ).first() is not None
+        result.append(schemas.ArticuloListItem(
+            productoId=producto.identificador,
+            presentacionId=pp.identificador if pp else 0,
+            titulo=pp.titulo if pp else producto.descripcionCatalogo,
+            categoria=pp.categoria if pp else "-",
+            fechaEnvio=producto.fecha,
+            estadoInspeccion=inspeccion.estado if inspeccion else "pendiente",
+            observaciones=inspeccion.observaciones if inspeccion else None,
+            enSubasta=en_subasta,
+        ))
+    return result
+
 #------------------ Estadísticas ---------------------------#
 
 def get_estadisticas_cliente(db: Session, cliente_id: int):
