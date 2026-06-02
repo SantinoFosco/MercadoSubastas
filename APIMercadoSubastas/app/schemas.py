@@ -300,6 +300,7 @@ class ProductoResponse(BaseModel):
 
 class FotoCreate(BaseModel):
     producto: int
+    imagen: Optional[str] = None  # base64
 
 class FotoResponse(BaseModel):
     identificador: int
@@ -395,6 +396,19 @@ class AsistenteResponse(BaseModel):
     subasta: int
     class Config:
         from_attributes = True
+
+#------------------ Condiciones de artículo ----------------#
+
+class ArticuloCondicionesResponse(BaseModel):
+    productoId: int
+    titulo: str
+    tieneCondiciones: bool
+    precioBase: Optional[float] = None
+    comision: Optional[float] = None
+    subastaFecha: Optional[date] = None
+    subastaHora: Optional[time] = None
+    subastaUbicacion: Optional[str] = None
+    aceptacion: Optional[str] = None  # 'pendiente' | 'aceptado' | 'rechazado'
 
 #------------------ Vender ---------------------------------#
 

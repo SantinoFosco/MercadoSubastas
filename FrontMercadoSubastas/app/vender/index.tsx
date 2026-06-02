@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import BottomTabBar from '@/components/BottomTabBar';
 import { API_ENDPOINTS } from '@/constants/api';
 import { SessionStore } from '@/store/session';
+import * as ImagePicker from 'expo-image-picker';
 
 const CATEGORY_OPTIONS = [
   'Relojería de Lujo',
@@ -45,8 +46,31 @@ export default function SubastarArticuloScreen() {
   const [isChecked, setIsChecked] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [uploadedFotos, setUploadedFotos] = useState<Record<number, string>>({});
+  const [productoId, setProductoId] = useState<number | null>(null);
 
   const canSubmit = articleName.trim() && description.trim() && isChecked && !isLoading;
+
+  const handleSlotPress = async (slotIndex: number, currentProductoId: number | null) => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') return;
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      base64: true,
+      quality: 0.6,
+    });
+    if (result.canceled || !result.assets[0].base64) return;
+    const base64 = result.assets[0].base64;
+    if (!currentProductoId) return;
+    try {
+      await fetch(API_ENDPOINTS.subirFoto, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ producto: currentProductoId, imagen: base64 }),
+      });
+      setUploadedFotos((prev) => ({ ...prev, [slotIndex]: result.assets[0].uri }));
+    } catch {}
+  };
 
   const handleSubmit = async () => {
     const session = SessionStore.get();
@@ -75,6 +99,8 @@ export default function SubastarArticuloScreen() {
         setError(data.detail ?? 'Error al enviar el artículo.');
         return;
       }
+      const data = await res.json();
+      setProductoId(data.productoId);
       router.push('/vender/mis-articulos');
     } catch {
       setError('No se pudo conectar con el servidor.');
@@ -171,19 +197,26 @@ export default function SubastarArticuloScreen() {
         <SectionHeader title="Galería de Imágenes" />
 
         <View style={styles.imageGrid}>
-          {IMAGE_SLOTS.map((slot, index) => (
-            <Pressable key={slot.label} style={styles.imageSlot}>
-              <View style={styles.imageSlotContent}>
-                <MaterialCommunityIcons name={slot.icon as any} size={40} color="#D0D0D0" />
-                <Text style={styles.imageSlotLabel}>{slot.label}</Text>
-              </View>
-              {index === 0 && (
-                <View style={styles.enArchivoBadge}>
-                  <Text style={styles.enArchivoBadgeText}>EN ARCHIVO</Text>
+          {IMAGE_SLOTS.map((slot, index) => {
+            const uploaded = !!uploadedFotos[index];
+            return (
+              <Pressable key={slot.label} style={styles.imageSlot} onPress={() => handleSlotPress(index, productoId)}>
+                <View style={styles.imageSlotContent}>
+                  <MaterialCommunityIcons
+                    name={uploaded ? 'check-circle' : slot.icon as any}
+                    size={40}
+                    color={uploaded ? '#4CAF50' : '#D0D0D0'}
+                  />
+                  <Text style={styles.imageSlotLabel}>{slot.label}</Text>
                 </View>
-              )}
-            </Pressable>
-          ))}
+                {index === 0 && !uploaded && (
+                  <View style={styles.enArchivoBadge}>
+                    <Text style={styles.enArchivoBadgeText}>EN ARCHIVO</Text>
+                  </View>
+                )}
+              </Pressable>
+            );
+          })}
         </View>
 
         <View style={styles.legalRow}>

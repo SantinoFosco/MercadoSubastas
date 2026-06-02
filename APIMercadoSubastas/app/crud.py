@@ -462,7 +462,14 @@ def create_producto(db: Session, request: schemas.ProductoCreate):
     return nuevo
 
 def create_foto(db: Session, request: schemas.FotoCreate):
-    nueva = models.Foto(producto=request.producto, foto=None)
+    imagen_bytes = None
+    if request.imagen:
+        import base64
+        try:
+            imagen_bytes = base64.b64decode(request.imagen)
+        except Exception:
+            imagen_bytes = None
+    nueva = models.Foto(producto=request.producto, foto=imagen_bytes)
     db.add(nueva)
     db.commit()
     db.refresh(nueva)
@@ -950,6 +957,79 @@ def confirmar_pago(db: Session, subasta_id: int, usuario_id: int, metodo_pago_id
         return None, "medio_pago"
 
     return "Pago confirmado correctamente", None
+
+#------------------ Condiciones de artículo ----------------#
+
+def get_condiciones_articulo(db: Session, producto_id: int):
+    pp = db.query(models.ProductoPresentacion).filter(
+        models.ProductoPresentacion.producto == producto_id
+    ).first()
+    titulo = pp.titulo if pp else "Artículo"
+
+    item = db.query(models.ItemCatalogo).filter(
+        models.ItemCatalogo.producto == producto_id
+    ).first()
+
+    aceptacion_obj = db.query(models.AceptacionArticulo).filter(
+        models.AceptacionArticulo.producto == producto_id
+    ).first()
+
+    if not item:
+        return schemas.ArticuloCondicionesResponse(
+            productoId=producto_id,
+            titulo=titulo,
+            tieneCondiciones=False,
+            aceptacion=aceptacion_obj.estado if aceptacion_obj else None,
+        )
+
+    catalogo = db.query(models.Catalogo).filter(
+        models.Catalogo.identificador == item.catalogo
+    ).first()
+    subasta = db.query(models.Subasta).filter(
+        models.Subasta.identificador == catalogo.subasta
+    ).first() if catalogo and catalogo.subasta else None
+
+    if not aceptacion_obj:
+        aceptacion_obj = models.AceptacionArticulo(producto=producto_id, estado="pendiente")
+        db.add(aceptacion_obj)
+        db.commit()
+        db.refresh(aceptacion_obj)
+
+    return schemas.ArticuloCondicionesResponse(
+        productoId=producto_id,
+        titulo=titulo,
+        tieneCondiciones=True,
+        precioBase=float(item.precioBase),
+        comision=float(item.comision),
+        subastaFecha=subasta.fecha if subasta else None,
+        subastaHora=subasta.hora if subasta else None,
+        subastaUbicacion=subasta.ubicacion if subasta else None,
+        aceptacion=aceptacion_obj.estado,
+    )
+
+def aceptar_condiciones(db: Session, producto_id: int):
+    obj = db.query(models.AceptacionArticulo).filter(
+        models.AceptacionArticulo.producto == producto_id
+    ).first()
+    if not obj:
+        obj = models.AceptacionArticulo(producto=producto_id)
+        db.add(obj)
+    obj.estado = "aceptado"
+    obj.fecha = datetime.now()
+    db.commit()
+    return schemas.MensajeResponse(mensaje="Condiciones aceptadas correctamente.")
+
+def rechazar_condiciones(db: Session, producto_id: int):
+    obj = db.query(models.AceptacionArticulo).filter(
+        models.AceptacionArticulo.producto == producto_id
+    ).first()
+    if not obj:
+        obj = models.AceptacionArticulo(producto=producto_id)
+        db.add(obj)
+    obj.estado = "rechazado"
+    obj.fecha = datetime.now()
+    db.commit()
+    return schemas.MensajeResponse(mensaje="Condiciones rechazadas. El artículo será devuelto.")
 
 #------------------ Vender ---------------------------------#
 

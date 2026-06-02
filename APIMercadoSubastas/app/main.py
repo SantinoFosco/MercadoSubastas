@@ -369,6 +369,18 @@ def get_clientes(db: Session = Depends(get_db)):
 def create_cliente(request: schemas.ClienteCreate, db: Session = Depends(get_db)):
     return crud.create_cliente(db=db, request=request)
 
+@app.get("/articulos/{producto_id}/condiciones", response_model=schemas.ArticuloCondicionesResponse)
+def get_condiciones_articulo(producto_id: int, db: Session = Depends(get_db)):
+    return crud.get_condiciones_articulo(db=db, producto_id=producto_id)
+
+@app.post("/articulos/{producto_id}/aceptar", response_model=schemas.MensajeResponse)
+def aceptar_condiciones(producto_id: int, db: Session = Depends(get_db)):
+    return crud.aceptar_condiciones(db=db, producto_id=producto_id)
+
+@app.post("/articulos/{producto_id}/rechazar", response_model=schemas.MensajeResponse)
+def rechazar_condiciones(producto_id: int, db: Session = Depends(get_db)):
+    return crud.rechazar_condiciones(db=db, producto_id=producto_id)
+
 @app.post("/articulos/", response_model=schemas.ArticuloSubmitResponse)
 def submit_articulo(request: schemas.ArticuloSubmitRequest, db: Session = Depends(get_db)):
     cliente = crud.get_cliente(db=db, cliente_id=request.clienteId)

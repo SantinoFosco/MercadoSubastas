@@ -306,3 +306,15 @@ class InspeccionProducto(Base):
         CheckConstraint("estado IN ('pendiente', 'aprobado', 'rechazado')", name="chkEstadoInspeccion"),
         CheckConstraint("costo_devolucion >= 0", name="chkCostoDevolucion"),
     )
+
+class AceptacionArticulo(Base):
+    __tablename__ = "aceptacion_articulos"
+
+    identificador = Column(Integer, primary_key=True, index=True)
+    producto = Column(Integer, ForeignKey("productos.identificador"), nullable=False, unique=True)
+    estado = Column(String, nullable=False, server_default="pendiente")
+    fecha = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint("estado IN ('pendiente', 'aceptado', 'rechazado')", name="chkEstadoAceptacion"),
+    )

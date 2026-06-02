@@ -88,7 +88,7 @@ export default function MisArticulosScreen() {
   const handleCardPress = (article: Article) => {
     switch (article.estadoInspeccion) {
       case 'aprobado':
-        router.push({ pathname: '/vender/articulo-aprobado', params: { titulo: article.titulo, categoria: article.categoria } });
+        router.push({ pathname: '/vender/articulo-aprobado', params: { titulo: article.titulo, categoria: article.categoria, productoId: String(article.productoId) } });
         break;
       case 'rechazado':
         router.push({ pathname: '/vender/inspeccion-rechazada', params: { titulo: article.titulo, observaciones: article.observaciones ?? '', productoId: String(article.productoId) } });
