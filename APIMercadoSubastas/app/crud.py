@@ -1095,6 +1095,7 @@ def get_articulos_cliente(db: Session, cliente_id: int):
             fechaEnvio=producto.fecha,
             estadoInspeccion=inspeccion.estado if inspeccion else "pendiente",
             observaciones=inspeccion.observaciones if inspeccion else None,
+            costoDevolucion=float(inspeccion.costo_devolucion) if inspeccion and inspeccion.costo_devolucion else None,
             enSubasta=en_subasta,
         ))
     return result

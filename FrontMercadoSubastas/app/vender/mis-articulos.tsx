@@ -91,7 +91,7 @@ export default function MisArticulosScreen() {
         router.push({ pathname: '/vender/articulo-aprobado', params: { titulo: article.titulo, categoria: article.categoria, productoId: String(article.productoId) } });
         break;
       case 'rechazado':
-        router.push({ pathname: '/vender/inspeccion-rechazada', params: { titulo: article.titulo, observaciones: article.observaciones ?? '', productoId: String(article.productoId) } });
+        router.push({ pathname: '/vender/inspeccion-rechazada', params: { titulo: article.titulo, observaciones: article.observaciones ?? '', costoDevolucion: String(article.costoDevolucion ?? '') } });
         break;
       case 'en_venta':
         router.push({ pathname: '/vender/ubicacion-seguro', params: { titulo: article.titulo } });

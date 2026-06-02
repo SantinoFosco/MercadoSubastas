@@ -433,6 +433,7 @@ class ArticuloListItem(BaseModel):
     fechaEnvio: Optional[date]
     estadoInspeccion: str
     observaciones: Optional[str]
+    costoDevolucion: Optional[float]
     enSubasta: bool
 
 #------------------ Estadísticas ---------------------------#

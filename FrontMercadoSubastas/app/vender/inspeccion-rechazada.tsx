@@ -16,7 +16,7 @@ import BottomTabBar from '@/components/BottomTabBar';
 
 export default function InspeccionRechazadaScreen() {
   const router = useRouter();
-  const { titulo, observaciones } = useLocalSearchParams<{ titulo: string; observaciones: string }>();
+  const { titulo, observaciones, costoDevolucion } = useLocalSearchParams<{ titulo: string; observaciones: string; costoDevolucion: string }>();
 
   return (
     <SafeAreaView style={styles.container}>
@@ -76,7 +76,9 @@ export default function InspeccionRechazadaScreen() {
         {/* 6. RETURN COST */}
         <View style={styles.returnCostRow}>
           <Text style={styles.returnCostLabel}>Costo de Devolución</Text>
-          <Text style={styles.returnCostValue}>$250 dolares</Text>
+          <Text style={styles.returnCostValue}>
+            {costoDevolucion ? `$${parseFloat(costoDevolucion).toLocaleString('es-AR')}` : 'A confirmar'}
+          </Text>
         </View>
 
         {/* 7. CTA BUTTON */}
