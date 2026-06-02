@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from . import crud, models, schemas
 from .database import SessionLocal, engine
 from .dev_router import router as dev_router
-from .seeds import seed_paises, seed_empleados, seed_subastas, seed_subastas_categorias, seed_usuario_prueba, seed_historial_prueba
+from .seeds import seed_paises, seed_empleados, seed_subastas, seed_subastas_categorias, seed_usuario_prueba, seed_historial_prueba, seed_configuracion
 
 # Crea las tablas si no existen
 models.Base.metadata.create_all(bind=engine)
@@ -16,6 +16,7 @@ seed_subastas()
 seed_subastas_categorias()
 seed_usuario_prueba()
 seed_historial_prueba()
+seed_configuracion()
 
 app = FastAPI()
 
@@ -368,6 +369,13 @@ def get_clientes(db: Session = Depends(get_db)):
 @app.post("/clientes/", response_model=schemas.ClienteResponse)
 def create_cliente(request: schemas.ClienteCreate, db: Session = Depends(get_db)):
     return crud.create_cliente(db=db, request=request)
+
+@app.get("/config/{clave}", response_model=schemas.ConfiguracionResponse)
+def get_configuracion(clave: str, db: Session = Depends(get_db)):
+    obj = db.query(models.ConfiguracionEmpresa).filter(models.ConfiguracionEmpresa.clave == clave).first()
+    if not obj:
+        raise HTTPException(status_code=404, detail="Configuración no encontrada")
+    return obj
 
 @app.get("/articulos/{producto_id}/condiciones", response_model=schemas.ArticuloCondicionesResponse)
 def get_condiciones_articulo(producto_id: int, db: Session = Depends(get_db)):

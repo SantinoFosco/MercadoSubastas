@@ -29,6 +29,7 @@ export const API_ENDPOINTS = {
   submitArticulo:        `${API_BASE_URL}/articulos/`,
   misArticulos:          (id: number | string) => `${API_BASE_URL}/clientes/${id}/articulos`,
   subirFoto:             `${API_BASE_URL}/fotos/`,
+  configEmpresa:         (clave: string) => `${API_BASE_URL}/config/${clave}`,
   condicionesArticulo:   (id: number | string) => `${API_BASE_URL}/articulos/${id}/condiciones`,
   aceptarCondiciones:    (id: number | string) => `${API_BASE_URL}/articulos/${id}/aceptar`,
   rechazarCondiciones:   (id: number | string) => `${API_BASE_URL}/articulos/${id}/rechazar`,

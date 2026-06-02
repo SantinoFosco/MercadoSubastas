@@ -345,6 +345,19 @@ def seed_usuario_prueba():
         db.close()
 
 
+def seed_configuracion():
+    db = SessionLocal()
+    try:
+        if not db.get(models.ConfiguracionEmpresa, "direccion_inspeccion"):
+            db.add(models.ConfiguracionEmpresa(
+                clave="direccion_inspeccion",
+                valor="Av. Corrientes 1234, Piso 3, CABA — Lunes a Viernes 9-17hs"
+            ))
+            db.commit()
+    finally:
+        db.close()
+
+
 def seed_historial_prueba():
     db = SessionLocal()
     try:

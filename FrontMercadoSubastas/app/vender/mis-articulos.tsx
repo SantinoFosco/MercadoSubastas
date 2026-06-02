@@ -17,6 +17,7 @@ type Article = {
   categoria: string;
   estadoInspeccion: ArticleStatus;
   observaciones: string | null;
+  costoDevolucion: number | null;
   enSubasta: boolean;
 };
 
@@ -53,6 +54,7 @@ export default function MisArticulosScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [activeFilter, setActiveFilter] = useState<FilterTab>('todos');
+  const [direccionInspeccion, setDireccionInspeccion] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchArticles() {
@@ -62,14 +64,22 @@ export default function MisArticulosScreen() {
         const res = await fetch(API_ENDPOINTS.misArticulos(session.identificador));
         if (!res.ok) throw new Error();
         const data = await res.json();
-        setArticles(data.map((item: any) => ({
+        const mapped: Article[] = data.map((item: any) => ({
           productoId: item.productoId,
           titulo: item.titulo,
           categoria: item.categoria,
           estadoInspeccion: resolveStatus(item),
           observaciones: item.observaciones ?? null,
+          costoDevolucion: item.costoDevolucion ?? null,
           enSubasta: item.enSubasta,
-        })));
+        }));
+        setArticles(mapped);
+        if (mapped.some((a) => a.estadoInspeccion === 'pendiente')) {
+          fetch(API_ENDPOINTS.configEmpresa('direccion_inspeccion'))
+            .then((r) => r.ok ? r.json() : null)
+            .then((d) => d && setDireccionInspeccion(d.valor))
+            .catch(() => {});
+        }
       } catch {
         setError('No se pudieron cargar los artículos.');
       } finally {
@@ -160,6 +170,14 @@ export default function MisArticulosScreen() {
                         {article.estadoInspeccion === 'pendiente' ? 'Esperando dictamen' : article.estadoInspeccion === 'aprobado' ? 'Autenticidad verificada' : article.estadoInspeccion === 'rechazado' ? 'Ver motivos del rechazo' : 'Listado en subasta'}
                       </Text>
                     </View>
+                    {article.estadoInspeccion === 'pendiente' && direccionInspeccion && (
+                      <View style={styles.articleDetailRow}>
+                        <MaterialCommunityIcons name="map-marker-outline" size={16} color="#999" />
+                        <Text style={[styles.articleDetailText, { color: '#666', fontWeight: '400' }]} numberOfLines={2}>
+                          {direccionInspeccion}
+                        </Text>
+                      </View>
+                    )}
                   </View>
                 </Pressable>
               );

@@ -307,6 +307,12 @@ class InspeccionProducto(Base):
         CheckConstraint("costo_devolucion >= 0", name="chkCostoDevolucion"),
     )
 
+class ConfiguracionEmpresa(Base):
+    __tablename__ = "configuracion_empresa"
+
+    clave = Column(String, primary_key=True, index=True)
+    valor = Column(String, nullable=False)
+
 class AceptacionArticulo(Base):
     __tablename__ = "aceptacion_articulos"
 

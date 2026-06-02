@@ -397,6 +397,12 @@ class AsistenteResponse(BaseModel):
     class Config:
         from_attributes = True
 
+#------------------ Configuración empresa ------------------#
+
+class ConfiguracionResponse(BaseModel):
+    clave: str
+    valor: str
+
 #------------------ Condiciones de artículo ----------------#
 
 class ArticuloCondicionesResponse(BaseModel):
