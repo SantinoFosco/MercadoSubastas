@@ -37,4 +37,10 @@ export const API_ENDPOINTS = {
                         `${API_BASE_URL}/subasta/${subastaId}/${clienteId}/compras`,
   precioTotal:        (subastaId: number | string, clienteId: number | string) =>
                         `${API_BASE_URL}/subasta/${subastaId}/${clienteId}/compras/precio`,
+  confirmarEnvio:     (subastaId: number | string, clienteId: number | string, metodo: string) =>
+                        `${API_BASE_URL}/subasta/${subastaId}/${clienteId}/compras/envio?metodoEnvio=${metodo}`,
+  confirmarPago:      (subastaId: number | string, clienteId: number | string, metodoPagoId: number) =>
+                        `${API_BASE_URL}/subasta/${subastaId}/${clienteId}/compras/pagar?metodoPagoId=${metodoPagoId}`,
+  mediosPagoCliente:  (clienteId: number | string) =>
+                        `${API_BASE_URL}/mediosPago?cliente_id=${clienteId}`,
 };

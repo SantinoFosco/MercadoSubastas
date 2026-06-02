@@ -1,16 +1,68 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { Text } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useRouter, Stack } from 'expo-router';
+import { useRouter, Stack, useLocalSearchParams } from 'expo-router';
 import BottomTabBar from '@/components/BottomTabBar';
+import { API_ENDPOINTS } from '@/constants/api';
 
 type DeliveryMethod = 'domicilio' | 'retiro';
 
+type PrecioFinal = {
+  precioFinal: number;
+  comision: number;
+  seguro: number;
+  total: number;
+};
+
+const formatCurrency = (n: number) =>
+  '$' + n.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
 export default function DeliveryDetailsScreen() {
   const router = useRouter();
+  const { subastaId, clienteId } = useLocalSearchParams<{ subastaId: string; clienteId: string }>();
+
   const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('domicilio');
+  const [precio, setPrecio]   = useState<PrecioFinal | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [confirming, setConfirming] = useState(false);
+
+  const fetchPrecio = useCallback(async () => {
+    if (!subastaId || !clienteId) return;
+    try {
+      const res = await fetch(API_ENDPOINTS.precioTotal(subastaId, clienteId));
+      if (res.ok) setPrecio(await res.json());
+    } finally {
+      setLoading(false);
+    }
+  }, [subastaId, clienteId]);
+
+  useEffect(() => { fetchPrecio(); }, [fetchPrecio]);
+
+  const handleContinuar = async () => {
+    if (!subastaId || !clienteId) return;
+    setConfirming(true);
+    try {
+      await fetch(API_ENDPOINTS.confirmarEnvio(subastaId, clienteId, deliveryMethod), {
+        method: 'POST',
+      });
+      router.push({
+        pathname: '/cierre-subasta/confirm-payment',
+        params: { subastaId, clienteId },
+      });
+    } catch {
+      Alert.alert('Error', 'No se pudo confirmar el método de entrega. Intentá de nuevo.');
+    } finally {
+      setConfirming(false);
+    }
+  };
+
+  // Cuando el usuario elige retiro personal, el seguro queda en $0
+  const seguroVisible = deliveryMethod === 'domicilio' ? (precio?.seguro ?? 0) : 0;
+  const totalVisible  = deliveryMethod === 'domicilio'
+    ? (precio?.total ?? 0)
+    : ((precio?.precioFinal ?? 0) + (precio?.comision ?? 0));
 
   return (
     <SafeAreaView style={styles.container}>
@@ -121,35 +173,45 @@ export default function DeliveryDetailsScreen() {
 
         {/* Resumen de Costos */}
         <Text style={styles.sectionTitle}>Resumen de Costos</Text>
-        <View style={styles.costSummaryCard}>
-          <View style={styles.costRow}>
-            <Text style={styles.costLabel}>Precio final</Text>
-            <Text style={styles.costValue}>$18,500</Text>
-          </View>
-          <View style={styles.costRow}>
-            <Text style={styles.costLabel}>Comisión (10%)</Text>
-            <Text style={styles.costValue}>$1,850</Text>
-          </View>
-          <View style={styles.costRow}>
-            <Text style={styles.costLabel}>Seguro de Envío</Text>
-            <Text style={styles.costValue}>$250</Text>
-          </View>
 
-          <View style={styles.costDivider} />
+        {loading ? (
+          <ActivityIndicator size="large" color="#FFD700" style={{ marginVertical: 24 }} />
+        ) : (
+          <View style={styles.costSummaryCard}>
+            <View style={styles.costRow}>
+              <Text style={styles.costLabel}>Precio final</Text>
+              <Text style={styles.costValue}>{formatCurrency(precio?.precioFinal ?? 0)}</Text>
+            </View>
+            <View style={styles.costRow}>
+              <Text style={styles.costLabel}>Comisión</Text>
+              <Text style={styles.costValue}>{formatCurrency(precio?.comision ?? 0)}</Text>
+            </View>
+            {seguroVisible > 0 && (
+              <View style={styles.costRow}>
+                <Text style={styles.costLabel}>Seguro de Envío</Text>
+                <Text style={styles.costValue}>{formatCurrency(seguroVisible)}</Text>
+              </View>
+            )}
 
-          <View style={styles.costRow}>
-            <Text style={styles.totalLabel}>Total a Pagar</Text>
-            <Text style={styles.totalValue}>$20,600</Text>
+            <View style={styles.costDivider} />
+
+            <View style={styles.costRow}>
+              <Text style={styles.totalLabel}>Total a Pagar</Text>
+              <Text style={styles.totalValue}>{formatCurrency(totalVisible)}</Text>
+            </View>
           </View>
-        </View>
+        )}
 
         {/* Continue Button */}
         <TouchableOpacity
-          style={styles.primaryButton}
-          onPress={() => router.push('/cierre-subasta/confirm-payment')}
+          style={[styles.primaryButton, (confirming || loading) && styles.primaryButtonDisabled]}
+          onPress={handleContinuar}
           activeOpacity={0.85}
+          disabled={confirming || loading}
         >
-          <Text style={styles.primaryButtonText}>CONTINUAR AL PAGO</Text>
+          <Text style={styles.primaryButtonText}>
+            {confirming ? 'PROCESANDO...' : 'CONTINUAR AL PAGO'}
+          </Text>
         </TouchableOpacity>
       </ScrollView>
 
@@ -371,6 +433,9 @@ const styles = StyleSheet.create({
     height: 56,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  primaryButtonDisabled: {
+    opacity: 0.6,
   },
   primaryButtonText: {
     color: '#FFFFFF',

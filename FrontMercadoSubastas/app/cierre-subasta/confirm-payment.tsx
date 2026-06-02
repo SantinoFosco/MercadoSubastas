@@ -1,16 +1,109 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { Text } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useRouter, Stack } from 'expo-router';
+import { useRouter, Stack, useLocalSearchParams } from 'expo-router';
 import BottomTabBar from '@/components/BottomTabBar';
+import { API_ENDPOINTS } from '@/constants/api';
 
-type PaymentMethod = 'visa' | 'banco' | 'garantia';
+type MedioPago = {
+  id: number;
+  tipo: 'tarjeta' | 'cuenta_bancaria' | 'cheque_certificado';
+  estado: string;
+  descripcion: string | null;
+  moneda: string;
+  esInternacional: boolean;
+  montoCheque: number | null;
+  montoDisponibleCheque: number | null;
+};
+
+type PrecioFinal = {
+  precioFinal: number;
+  comision: number;
+  seguro: number;
+  total: number;
+};
+
+const formatCurrency = (n: number) =>
+  '$' + n.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+function iconForTipo(tipo: MedioPago['tipo']): React.ComponentProps<typeof MaterialCommunityIcons>['name'] {
+  if (tipo === 'tarjeta') return 'credit-card-outline';
+  if (tipo === 'cuenta_bancaria') return 'bank-outline';
+  return 'checkbook';
+}
+
+function labelForMedio(medio: MedioPago): string {
+  if (medio.tipo === 'tarjeta') return medio.descripcion ?? 'Tarjeta';
+  if (medio.tipo === 'cuenta_bancaria') return medio.descripcion ?? 'Cuenta Bancaria';
+  return medio.descripcion ?? 'Cheque Certificado';
+}
+
+function subLabelForMedio(medio: MedioPago): string {
+  if (medio.tipo === 'cheque_certificado' && medio.montoDisponibleCheque != null) {
+    return `Disponible: ${formatCurrency(Number(medio.montoDisponibleCheque))}`;
+  }
+  return medio.moneda === 'USD' ? 'Internacional · USD' : medio.moneda;
+}
 
 export default function ConfirmPaymentScreen() {
   const router = useRouter();
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('visa');
+  const { subastaId, clienteId } = useLocalSearchParams<{ subastaId: string; clienteId: string }>();
+
+  const [medios, setMedios]         = useState<MedioPago[]>([]);
+  const [precio, setPrecio]         = useState<PrecioFinal | null>(null);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [loading, setLoading]       = useState(true);
+  const [paying, setPaying]         = useState(false);
+
+  const fetchData = useCallback(async () => {
+    if (!subastaId || !clienteId) return;
+    try {
+      const [resMedios, resPrecio] = await Promise.all([
+        fetch(API_ENDPOINTS.mediosPagoCliente(clienteId)),
+        fetch(API_ENDPOINTS.precioTotal(subastaId, clienteId)),
+      ]);
+      if (resMedios.ok) {
+        const data = await resMedios.json();
+        const verificados: MedioPago[] = (data.medios as MedioPago[]).filter(
+          (m) => m.estado === 'verificado'
+        );
+        setMedios(verificados);
+        if (verificados.length > 0) setSelectedId(verificados[0].id);
+      }
+      if (resPrecio.ok) setPrecio(await resPrecio.json());
+    } finally {
+      setLoading(false);
+    }
+  }, [subastaId, clienteId]);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  const handleFinalizar = async () => {
+    if (!subastaId || !clienteId || selectedId == null) return;
+    setPaying(true);
+    try {
+      const res = await fetch(
+        API_ENDPOINTS.confirmarPago(subastaId, clienteId, selectedId),
+        { method: 'POST' }
+      );
+      if (res.ok) {
+        Alert.alert(
+          '¡Compra confirmada!',
+          'Tu pago fue registrado correctamente. Nos pondremos en contacto para coordinar la entrega.',
+          [{ text: 'Volver al inicio', onPress: () => router.push('/exploracion') }]
+        );
+      } else {
+        const err = await res.json().catch(() => ({}));
+        Alert.alert('Error al pagar', err.detail ?? 'No se pudo procesar el pago. Intentá de nuevo.');
+      }
+    } catch {
+      Alert.alert('Error', 'Error de conexión. Verificá tu internet e intentá de nuevo.');
+    } finally {
+      setPaying(false);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -33,113 +126,106 @@ export default function ConfirmPaymentScreen() {
         {/* Title Section */}
         <Text style={styles.title}>Confirmar Pago</Text>
         <Text style={styles.subtitle}>
-          Has ganado la subasta #4492. Completa la transacción para asegurar tu lote.
+          Completa la transacción para asegurar tu lote.
         </Text>
 
-        {/* Lot Summary */}
-        <View style={styles.lotSummaryCard}>
-          <Text style={styles.sectionLabel}>RESUMEN DEL LOTE</Text>
-          <Text style={styles.lotName}>
-            Reloj de Colección:{'\n'}Chronos Prestige Edición{'\n'}Oro
-          </Text>
-          <Text style={styles.lotCertified}>Lote certificado por Expertos Elite</Text>
+        {loading ? (
+          <ActivityIndicator size="large" color="#FFD700" style={{ marginVertical: 32 }} />
+        ) : (
+          <>
+            {/* Lot Summary */}
+            <View style={styles.lotSummaryCard}>
+              <Text style={styles.sectionLabel}>RESUMEN DE COMPRA</Text>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryRowLabel}>Lo pujado</Text>
+                <Text style={styles.summaryRowValue}>{formatCurrency(precio?.precioFinal ?? 0)}</Text>
+              </View>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryRowLabel}>Comisión</Text>
+                <Text style={styles.summaryRowValue}>{formatCurrency(precio?.comision ?? 0)}</Text>
+              </View>
+              {(precio?.seguro ?? 0) > 0 && (
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryRowLabel}>Seguro de Envío</Text>
+                  <Text style={styles.summaryRowValue}>{formatCurrency(precio!.seguro)}</Text>
+                </View>
+              )}
+              <View style={styles.summaryDivider} />
+              <Text style={styles.totalLabel}>TOTAL A PAGAR</Text>
+              <Text style={styles.totalPrice}>{formatCurrency(precio?.total ?? 0)}</Text>
+            </View>
 
-          <Text style={styles.totalLabel}>TOTAL A PAGAR</Text>
-          <Text style={styles.totalPrice}>$20,600</Text>
-        </View>
+            {/* Payment Methods */}
+            <Text style={styles.paymentTitle}>Método de Pago Verificado</Text>
 
-        {/* Payment Methods */}
-        <Text style={styles.paymentTitle}>Método de Pago Verificado</Text>
+            {medios.length === 0 ? (
+              <View style={styles.emptyCard}>
+                <MaterialCommunityIcons name="alert-circle-outline" size={32} color="#D32F2F" />
+                <Text style={styles.emptyText}>
+                  No tenés medios de pago verificados.{'\n'}Comunicate con la casa de subastas.
+                </Text>
+              </View>
+            ) : (
+              medios.map((medio) => (
+                <TouchableOpacity
+                  key={medio.id}
+                  style={[
+                    styles.paymentOption,
+                    selectedId === medio.id && styles.paymentOptionSelected,
+                  ]}
+                  onPress={() => setSelectedId(medio.id)}
+                  activeOpacity={0.8}
+                >
+                  <View style={styles.paymentIconContainer}>
+                    <MaterialCommunityIcons
+                      name={iconForTipo(medio.tipo)}
+                      size={22}
+                      color="#614F3A"
+                    />
+                  </View>
+                  <View style={styles.paymentTextContainer}>
+                    <Text style={styles.paymentOptionTitle}>{labelForMedio(medio)}</Text>
+                    <Text style={styles.paymentOptionSub}>{subLabelForMedio(medio)}</Text>
+                  </View>
+                  <View style={[styles.radioOuter, selectedId === medio.id && styles.radioOuterSelected]}>
+                    {selectedId === medio.id && <View style={styles.radioInner} />}
+                  </View>
+                </TouchableOpacity>
+              ))
+            )}
 
-        {/* Visa */}
-        <TouchableOpacity
-          style={[
-            styles.paymentOption,
-            paymentMethod === 'visa' && styles.paymentOptionSelected,
-          ]}
-          onPress={() => setPaymentMethod('visa')}
-          activeOpacity={0.8}
-        >
-          <View style={styles.paymentIconContainer}>
-            <MaterialCommunityIcons name="credit-card-outline" size={22} color="#2B3966" />
-          </View>
-          <View style={styles.paymentTextContainer}>
-            <Text style={styles.paymentOptionTitle}>Visa **** 1234</Text>
-            <Text style={styles.paymentOptionSub}>Vence 08/26</Text>
-          </View>
-          <View style={[styles.radioOuter, paymentMethod === 'visa' && styles.radioOuterSelected]}>
-            {paymentMethod === 'visa' && <View style={styles.radioInner} />}
-          </View>
-        </TouchableOpacity>
+            {/* Security Message */}
+            <View style={styles.securityCard}>
+              <MaterialCommunityIcons name="shield-check-outline" size={18} color="#8A6D3B" />
+              <Text style={styles.securityText}>
+                <Text style={styles.securityBold}>Mensaje de seguridad: </Text>
+                Esta transacción está protegida por encriptación de grado bancario. Sus datos financieros nunca se comparten con el vendedor. Al hacer clic en finalizar, autoriza el cobro del total indicado.
+              </Text>
+            </View>
 
-        {/* Cuenta Bancaria */}
-        <TouchableOpacity
-          style={[
-            styles.paymentOption,
-            paymentMethod === 'banco' && styles.paymentOptionSelected,
-          ]}
-          onPress={() => setPaymentMethod('banco')}
-          activeOpacity={0.8}
-        >
-          <View style={styles.paymentIconContainer}>
-            <MaterialCommunityIcons name="bank-outline" size={22} color="#614F3A" />
-          </View>
-          <View style={styles.paymentTextContainer}>
-            <Text style={styles.paymentOptionTitle}>Cuenta Bancaria</Text>
-            <Text style={styles.paymentOptionSub}>Banco Global Express</Text>
-          </View>
-          <View style={[styles.radioOuter, paymentMethod === 'banco' && styles.radioOuterSelected]}>
-            {paymentMethod === 'banco' && <View style={styles.radioInner} />}
-          </View>
-        </TouchableOpacity>
+            {/* Finalize Button */}
+            <TouchableOpacity
+              style={[
+                styles.primaryButton,
+                (paying || selectedId == null) && styles.primaryButtonDisabled,
+              ]}
+              onPress={handleFinalizar}
+              activeOpacity={0.85}
+              disabled={paying || selectedId == null}
+            >
+              <Text style={styles.primaryButtonText}>
+                {paying ? 'PROCESANDO...' : 'Finalizar Compra'}
+              </Text>
+            </TouchableOpacity>
 
-        {/* Saldo en Garantía */}
-        <TouchableOpacity
-          style={[
-            styles.paymentOption,
-            paymentMethod === 'garantia' && styles.paymentOptionSelected,
-          ]}
-          onPress={() => setPaymentMethod('garantia')}
-          activeOpacity={0.8}
-        >
-          <View style={styles.paymentIconContainer}>
-            <MaterialCommunityIcons name="circle-multiple-outline" size={22} color="#8D7A27" />
-          </View>
-          <View style={styles.paymentTextContainer}>
-            <Text style={styles.paymentOptionTitle}>Saldo en Garantía</Text>
-            <Text style={styles.paymentOptionSub}>Disponible: $25,000</Text>
-          </View>
-          <View style={[styles.radioOuter, paymentMethod === 'garantia' && styles.radioOuterSelected]}>
-            {paymentMethod === 'garantia' && <View style={styles.radioInner} />}
-          </View>
-        </TouchableOpacity>
-
-        {/* Security Message */}
-        <View style={styles.securityCard}>
-          <MaterialCommunityIcons name="shield-check-outline" size={18} color="#8A6D3B" />
-          <Text style={styles.securityText}>
-            <Text style={styles.securityBold}>Mensaje de seguridad: </Text>
-            Esta transacción está protegida por encriptación de grado bancario. Sus datos financieros nunca se comparten con el vendedor. Al hacer clic en finalizar, autoriza el cobro del total indicado.
-          </Text>
-        </View>
-
-        {/* Finalize Button */}
-        <TouchableOpacity
-          style={styles.primaryButton}
-          onPress={() => {
-            // TODO: Handle payment finalization
-          }}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.primaryButtonText}>Finalizar Compra</Text>
-        </TouchableOpacity>
-
-        {/* Trust Icons */}
-        <View style={styles.trustIcons}>
-          <MaterialCommunityIcons name="shield-lock-outline" size={24} color="#999999" />
-          <MaterialCommunityIcons name="camera-outline" size={24} color="#999999" />
-          <MaterialCommunityIcons name="account-check-outline" size={24} color="#999999" />
-        </View>
+            {/* Trust Icons */}
+            <View style={styles.trustIcons}>
+              <MaterialCommunityIcons name="shield-lock-outline" size={24} color="#999999" />
+              <MaterialCommunityIcons name="camera-outline" size={24} color="#999999" />
+              <MaterialCommunityIcons name="account-check-outline" size={24} color="#999999" />
+            </View>
+          </>
+        )}
       </ScrollView>
 
       {/* Bottom Tab Bar */}
@@ -196,19 +282,26 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#8A6D3B',
     letterSpacing: 1.5,
+    marginBottom: 12,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     marginBottom: 8,
   },
-  lotName: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#1A1A1A',
-    lineHeight: 26,
-    marginBottom: 6,
+  summaryRowLabel: {
+    fontSize: 14,
+    color: '#555555',
   },
-  lotCertified: {
-    fontSize: 12,
-    color: '#999999',
-    marginBottom: 16,
+  summaryRowValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1A1A1A',
+  },
+  summaryDivider: {
+    height: 1,
+    backgroundColor: '#E0E0E0',
+    marginVertical: 12,
   },
   totalLabel: {
     fontSize: 10,
@@ -285,6 +378,22 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFD700',
   },
 
+  /* Empty state */
+  emptyCard: {
+    backgroundColor: '#FFF5F5',
+    borderRadius: 12,
+    padding: 20,
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 16,
+  },
+  emptyText: {
+    fontSize: 13,
+    color: '#D32F2F',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+
   /* Security Card */
   securityCard: {
     backgroundColor: '#F5F6F8',
@@ -315,6 +424,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 20,
+  },
+  primaryButtonDisabled: {
+    opacity: 0.6,
   },
   primaryButtonText: {
     color: '#FFFFFF',

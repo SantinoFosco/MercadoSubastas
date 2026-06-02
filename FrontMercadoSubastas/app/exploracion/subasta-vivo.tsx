@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   ScrollView,
@@ -71,17 +71,24 @@ export default function SubastaVivoScreen() {
   const { auctionState, isConnected, auctionEnded, soldInfo, connectionError } =
     useAuctionWebSocket(subastaId ?? null, clienteId);
 
-  // F6: navegar a la pantalla de ganador si el usuario actual ganó el ítem
+  // Rastrear si el usuario ganó al menos un ítem (para redirigir al cierre)
+  const [hasWon, setHasWon] = useState(false);
+
+  // Cuando el usuario gana un ítem: marcar como ganador y quedarse en la sala.
+  // El usuario puede seguir pujando por los próximos ítems; el pago se hace
+  // UNA SOLA VEZ al final con el total acumulado de todo lo ganado.
   useEffect(() => {
-    if (!soldInfo || soldInfo.ganadorClienteId !== clienteId || !subastaId) return;
-    const timer = setTimeout(() => {
-      router.push({
-        pathname: '/cierre-subasta/winner',
-        params: { subastaId: subastaId, clienteId: String(clienteId) },
-      });
-    }, 4000); // coincide con el tiempo que dura el overlay VENDIDO
-    return () => clearTimeout(timer);
-  }, [soldInfo]);
+    if (soldInfo?.ganadorClienteId === clienteId) setHasWon(true);
+  }, [soldInfo, clienteId]);
+
+  // Al terminar la subasta: si ganó algo → ir al resumen de compras y pago.
+  useEffect(() => {
+    if (!auctionEnded || !hasWon || !subastaId || !clienteId) return;
+    router.push({
+      pathname: '/cierre-subasta/winner',
+      params: { subastaId: subastaId, clienteId: String(clienteId) },
+    });
+  }, [auctionEnded, hasWon]);
 
   // F3: mostrar error de conexión si el usuario ya está en otra subasta
   useEffect(() => {
@@ -165,8 +172,8 @@ export default function SubastaVivoScreen() {
     }
   };
 
-  // ── Estado: subasta finalizada ───────────────────────────────────────────────
-  if (auctionEnded) {
+  // ── Estado: subasta finalizada (solo para quienes no ganaron nada) ──────────
+  if (auctionEnded && !hasWon) {
     return (
       <SafeAreaView style={styles.safeArea} edges={['bottom']}>
         <View style={styles.endedContainer}>
@@ -222,12 +229,28 @@ export default function SubastaVivoScreen() {
             <Text style={styles.heroTitle}>{titulo}</Text>
           </View>
 
-          {/* Overlay ¡VENDIDO! — aparece 4s cuando se cierra un ítem */}
+          {/* Overlay ¡VENDIDO! — aparece cuando se cierra un ítem.
+              Si el ganador es el usuario actual, se personaliza el mensaje
+              y queda en la sala para seguir pujando por los próximos lotes. */}
           {soldInfo && (
-            <View style={styles.soldOverlay}>
-              <MaterialCommunityIcons name="gavel" size={48} color="#FFD700" />
+            <View style={[
+              styles.soldOverlay,
+              soldInfo.ganadorClienteId === clienteId && styles.soldOverlayWinner,
+            ]}>
+              <MaterialCommunityIcons
+                name={soldInfo.ganadorClienteId === clienteId ? 'trophy' : 'gavel'}
+                size={48}
+                color="#FFD700"
+              />
               <Text style={styles.soldTitle}>¡VENDIDO!</Text>
-              <Text style={styles.soldWinner}>{soldInfo.ganadorNombre}</Text>
+              {soldInfo.ganadorClienteId === clienteId ? (
+                <>
+                  <Text style={styles.soldWinnerSelf}>¡ES TUYO!</Text>
+                  <Text style={styles.soldWinnerHint}>Seguís en la subasta — pagás todo al final</Text>
+                </>
+              ) : (
+                <Text style={styles.soldWinner}>{soldInfo.ganadorNombre}</Text>
+              )}
               <Text style={styles.soldAmount}>{formatCurrency(soldInfo.importe)}</Text>
             </View>
           )}
@@ -391,6 +414,9 @@ const styles = StyleSheet.create({
     gap: 8,
     zIndex: 20,
   },
+  soldOverlayWinner: {
+    backgroundColor: 'rgba(26,60,26,0.88)',
+  },
   soldTitle: {
     color: '#FFD700',
     fontSize: 32,
@@ -401,6 +427,19 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 18,
     fontWeight: '700',
+  },
+  soldWinnerSelf: {
+    color: '#FFD700',
+    fontSize: 22,
+    fontWeight: '900',
+    letterSpacing: 1,
+  },
+  soldWinnerHint: {
+    color: '#CCFFCC',
+    fontSize: 12,
+    fontWeight: '500',
+    textAlign: 'center',
+    paddingHorizontal: 24,
   },
   soldAmount: {
     color: '#FFD700',
