@@ -5,19 +5,21 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import BottomTabBar from '@/components/BottomTabBar';
+import { SessionStore } from '@/store/session';
 
 // ─── Component ───────────────────────────────────────────────────────
 
 export default function PerfilScreen() {
   const router = useRouter();
+  const session = SessionStore.get();
 
-  // ─── Editable state ──────────────────────────────────────────────
+  // ─── Editable state — inicializado con datos de sesión ───────────
   const [isEditing, setIsEditing] = useState(false);
-  const [nombre, setNombre] = useState('Bautista Damian');
-  const [correo, setCorreo] = useState('bautista@uade.edu.ar');
-  const [dni, setDni] = useState('45.984.323');
-  const [pais, setPais] = useState('Argentina');
-  const [direccion, setDireccion] = useState('Lamadrid 733');
+  const [nombre, setNombre] = useState(session?.nombre ?? '');
+  const [correo, setCorreo] = useState(session?.mail ?? '');
+  const [dni, setDni] = useState('');
+  const [pais, setPais] = useState('');
+  const [direccion, setDireccion] = useState('');
 
   const fields = [
     { label: 'NOMBRE COMPLETO', value: nombre, setter: setNombre },
@@ -48,11 +50,12 @@ export default function PerfilScreen() {
   };
 
   const handleLogout = () => {
-    router.push('/login');
+    SessionStore.clear();
+    router.replace('/sign-in');
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       {/* ─── Scrollable Content ──────────────────────────────────── */}
       <ScrollView
         style={styles.scrollView}

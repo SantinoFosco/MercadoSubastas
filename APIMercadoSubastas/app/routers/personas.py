@@ -56,6 +56,27 @@ def ep_create_duenio(request: schemas.DuenioCreate, db: Session = Depends(get_db
     except IntegrityError:
         raise HTTPException(status_code=400, detail="No se puede crear el dueño: datos inválidos o duplicados")
 
+@router.put("/duenios/{duenio_id}/verificacion", response_model=schemas.DuenioResponse)
+def ep_update_duenio_verificacion(duenio_id: int, request: schemas.DuenioVerificacionUpdate, db: Session = Depends(get_db)):
+    duenio = db.query(models.Duenio).filter(models.Duenio.identificador == duenio_id).first()
+    if not duenio:
+        raise HTTPException(status_code=404, detail="Dueño no encontrado")
+    if request.verificacionFinanciera is not None:
+        if request.verificacionFinanciera not in ("si", "no"):
+            raise HTTPException(status_code=422, detail="verificacionFinanciera debe ser 'si' o 'no'")
+        duenio.verificacionFinanciera = request.verificacionFinanciera
+    if request.verificacionJudicial is not None:
+        if request.verificacionJudicial not in ("si", "no"):
+            raise HTTPException(status_code=422, detail="verificacionJudicial debe ser 'si' o 'no'")
+        duenio.verificacionJudicial = request.verificacionJudicial
+    if request.calificacionRiesgo is not None:
+        if request.calificacionRiesgo not in (1, 2, 3, 4, 5, 6):
+            raise HTTPException(status_code=422, detail="calificacionRiesgo debe ser entre 1 y 6")
+        duenio.calificacionRiesgo = request.calificacionRiesgo
+    db.commit()
+    db.refresh(duenio)
+    return duenio
+
 @router.delete("/duenios/{duenio_id}")
 def ep_delete_duenio(duenio_id: int, db: Session = Depends(get_db)):
     try:

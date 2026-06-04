@@ -21,8 +21,16 @@ class MensajeResponse(BaseModel):
     mensaje: str
 
 class RegistroVerificacionRequest(BaseModel):
-    mail: EmailStr
+    personaId: int
     verificador: int
+    categoria: Optional[str] = "comun"
+
+class RegistroPendienteResponse(BaseModel):
+    personaId: int
+    nombre: str
+    documento: str
+    mail: str
+    pais: int
 
 class RegistroEstadoResponse(BaseModel):
     verificado: bool
@@ -71,6 +79,7 @@ class DescripcionUpdate(BaseModel):
 class CuentaBancariaCreate(BaseModel):
     cliente: int
     moneda: str = "ARS"
+    esInternacional: bool = False
     descripcion: Optional[str] = None
     titular: str
     banco: str
@@ -269,6 +278,11 @@ class DuenioResponse(BaseModel):
     class Config:
         from_attributes = True
 
+class DuenioVerificacionUpdate(BaseModel):
+    verificacionFinanciera: Optional[str] = None
+    verificacionJudicial: Optional[str] = None
+    calificacionRiesgo: Optional[int] = None
+
 class SubastadorCreate(BaseModel):
     identificador: int
     matricula: Optional[str] = None
@@ -342,6 +356,7 @@ class SubastaCreate(BaseModel):
     tieneDeposito: Optional[str] = None
     seguridadPropia: Optional[str] = None
     categoria: str = "comun"
+    moneda: str = "ARS"
 
 class SubastaResponse(BaseModel):
     identificador: int
@@ -354,6 +369,7 @@ class SubastaResponse(BaseModel):
     tieneDeposito: Optional[str] = None
     seguridadPropia: Optional[str] = None
     categoria: str
+    moneda: str = "ARS"
     class Config:
         from_attributes = True
 
@@ -430,5 +446,17 @@ class PaisCreate(PaisBase):
 class Pais(PaisBase):
     numero: int
 
+    class Config:
+        from_attributes = True
+
+#------------------ Multas --------------------------------#
+
+class MultaResponse(BaseModel):
+    identificador: int
+    cliente: int
+    subasta: int
+    monto: Decimal
+    pagado: str
+    fecha_limite: datetime
     class Config:
         from_attributes = True

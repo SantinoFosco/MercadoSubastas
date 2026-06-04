@@ -36,7 +36,7 @@ class PersonaDetalle(Base):
     identificador = Column(Integer, primary_key=True, index=True)
     persona = Column(Integer, ForeignKey("personas.identificador"), nullable=False)
     pais = Column(Integer, ForeignKey("paises.numero"), nullable=False)
-    mail = Column(String, nullable=False)
+    mail = Column(String, nullable=False, unique=True)
     contrasenia = Column(String, nullable=False)
     claveTemporal = Column(Boolean, nullable=False)
     
@@ -118,13 +118,15 @@ class Subasta(Base):
     tieneDeposito = Column(String, nullable=True)
     seguridadPropia = Column(String, nullable=True)
     categoria = Column(String, nullable=True, server_default="comun")
+    moneda    = Column(String, nullable=False, server_default="ARS")
 
     __table_args__ = (
         CheckConstraint("fecha > (CURRENT_DATE + INTERVAL '10 days')", name="chkFecha"),
         CheckConstraint("estado IN ('abierta', 'cerrada')", name="chkEstado"),
         CheckConstraint("\"tieneDeposito\" IN ('si', 'no')", name="chkTD"),
         CheckConstraint("\"seguridadPropia\" IN ('si', 'no')", name="chkSP"),
-        CheckConstraint("categoria IN ('comun', 'especial', 'plata', 'oro', 'platino')", name="chkCategoria")
+        CheckConstraint("categoria IN ('comun', 'especial', 'plata', 'oro', 'platino')", name="chkCategoria"),
+        CheckConstraint("moneda IN ('ARS', 'USD')", name="chkMonedaSubasta"),
     )
 
 class Producto(Base):
@@ -186,8 +188,8 @@ class ItemCatalogo(Base):
     subastado = Column(String, nullable=False, server_default="no")
 
     __table_args__ = (
-        CheckConstraint("\"precioBase\" > 0", name="chkPrecioBase"),
-        CheckConstraint("comision > 0", name="chkComision"),
+        CheckConstraint("\"precioBase\" > 0.01", name="chkPrecioBase"),
+        CheckConstraint("comision > 0.01", name="chkComision"),
         CheckConstraint("subastado IN ('si', 'no')", name="chkSubastado"),
     )
 
@@ -233,12 +235,20 @@ class RegistroSubasta(Base):
     __tablename__ = "registro_subastas"
 
     identificador = Column(Integer, primary_key=True, index=True)
-    subasta = Column(Integer, ForeignKey("subastas.identificador"), nullable=False)
-    duenio = Column(Integer, ForeignKey("duenios.identificador"), nullable=False)
-    producto = Column(Integer, ForeignKey("productos.identificador"), nullable=False)
-    cliente = Column(Integer, ForeignKey("clientes.identificador"), nullable=False)
-    importe = Column(Numeric(precision=18, scale=2), nullable=False)
-    comision = Column(Numeric(precision=18, scale=2), nullable=False)
+    subasta   = Column(Integer, ForeignKey("subastas.identificador"),    nullable=False)
+    duenio    = Column(Integer, ForeignKey("duenios.identificador"),     nullable=False)
+    producto  = Column(Integer, ForeignKey("productos.identificador"),   nullable=False)
+    cliente   = Column(Integer, ForeignKey("clientes.identificador"),    nullable=False)
+    importe   = Column(Numeric(precision=18, scale=2), nullable=False)
+    comision  = Column(Numeric(precision=18, scale=2), nullable=False)
+    # Campos agregados al confirmar el pago al cierre de la subasta
+    medio_pago   = Column(Integer, ForeignKey("medios_pago.identificador"), nullable=True)
+    pagado        = Column(String, nullable=False, server_default="no")
+    metodo_envio  = Column(String, nullable=True)
+
+    __table_args__ = (
+        CheckConstraint("pagado IN ('si', 'no')", name="chkPagado"),
+    )
 
 class MedioPago(Base):
     __tablename__ = "medios_pago"
@@ -292,6 +302,21 @@ class mpChequeCertificado(Base):
     monto = Column(Numeric(precision=18, scale=2), nullable=False)
     monto_disponible = Column(Numeric(precision=18, scale=2), nullable=False)
     observaciones = Column(String, nullable=True)
+
+class Multa(Base):
+    __tablename__ = "multas"
+
+    identificador = Column(Integer, primary_key=True, index=True)
+    cliente       = Column(Integer, ForeignKey("clientes.identificador"), nullable=False)
+    subasta       = Column(Integer, ForeignKey("subastas.identificador"), nullable=False)
+    monto         = Column(Numeric(precision=18, scale=2), nullable=False)
+    pagado        = Column(String, nullable=False, server_default="no")
+    fecha_limite  = Column(DateTime, nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("pagado IN ('si', 'no')", name="chkMultaPagado"),
+        CheckConstraint("monto > 0", name="chkMultaMonto"),
+    )
 
 class InspeccionProducto(Base):
     __tablename__ = "inspeccion_productos"

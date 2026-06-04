@@ -14,6 +14,8 @@ def iniciar_registro(db: Session, request: schemas.RegistroIniciarRequest):
     request.mail = request.mail.lower()
     if db.query(models.Persona).filter(models.Persona.documento == request.documento).first():
         raise HTTPException(status_code=409, detail="El documento ya está registrado")
+    if db.query(models.PersonaDetalle).filter(models.PersonaDetalle.mail == request.mail).first():
+        raise HTTPException(status_code=409, detail="El mail ya está registrado")
     try:
         nueva_persona = models.Persona(
             nombre=f"{request.nombre} {request.apellido}",
@@ -38,21 +40,46 @@ def iniciar_registro(db: Session, request: schemas.RegistroIniciarRequest):
         raise e
 
 
+def get_pendientes(db: Session):
+    with_cliente = db.query(models.Cliente.identificador).subquery()
+    rows = (
+        db.query(models.PersonaDetalle, models.Persona)
+        .join(models.Persona, models.PersonaDetalle.persona == models.Persona.identificador)
+        .filter(~models.PersonaDetalle.persona.in_(with_cliente))
+        .all()
+    )
+    return [
+        schemas.RegistroPendienteResponse(
+            personaId=persona.identificador,
+            nombre=persona.nombre,
+            documento=persona.documento,
+            mail=detalle.mail,
+            pais=detalle.pais,
+        )
+        for detalle, persona in rows
+    ]
+
+
 def aprobar_registro(db: Session, request: schemas.RegistroVerificacionRequest):
-    import random
-    request.mail = request.mail.lower()
-    persona_detalle = db.query(models.PersonaDetalle).filter(models.PersonaDetalle.mail == request.mail).first()
+    persona = db.query(models.Persona).filter(models.Persona.identificador == request.personaId).first()
+    if not persona:
+        raise HTTPException(status_code=404, detail="Persona no encontrada")
+    persona_detalle = db.query(models.PersonaDetalle).filter(models.PersonaDetalle.persona == request.personaId).first()
     if not persona_detalle:
-        raise HTTPException(status_code=404, detail="Correo no registrado")
+        raise HTTPException(status_code=404, detail="El usuario no completó el registro inicial")
     if not db.query(models.Empleado).filter(models.Empleado.identificador == request.verificador).first():
         raise HTTPException(status_code=404, detail="Empleado verificador no encontrado")
-    persona = db.query(models.Persona).filter(models.Persona.identificador == persona_detalle.persona).first()
+    categorias_validas = {"comun", "especial", "plata", "oro", "platino"}
+    if (request.categoria or "comun") not in categorias_validas:
+        raise HTTPException(status_code=422, detail="Categoría inválida")
+    if db.query(models.Cliente).filter(models.Cliente.identificador == request.personaId).first():
+        raise HTTPException(status_code=409, detail="El usuario ya fue verificado anteriormente")
     persona.estado = "activo"
     db.add(models.Cliente(
         identificador=persona.identificador,
         numeroPais=persona_detalle.pais,
         admitido="si",
-        categoria=random.choice(["comun", "especial", "plata", "oro", "platino"]),
+        categoria=request.categoria or "comun",
         verificador=request.verificador,
     ))
     db.commit()
@@ -60,14 +87,16 @@ def aprobar_registro(db: Session, request: schemas.RegistroVerificacionRequest):
 
 
 def desaprobar_registro(db: Session, request: schemas.RegistroVerificacionRequest):
-    request.mail = request.mail.lower()
-    persona_detalle = db.query(models.PersonaDetalle).filter(models.PersonaDetalle.mail == request.mail).first()
+    persona = db.query(models.Persona).filter(models.Persona.identificador == request.personaId).first()
+    if not persona:
+        raise HTTPException(status_code=404, detail="Persona no encontrada")
+    persona_detalle = db.query(models.PersonaDetalle).filter(models.PersonaDetalle.persona == request.personaId).first()
     if not persona_detalle:
-        raise HTTPException(status_code=404, detail="Correo no registrado")
+        raise HTTPException(status_code=404, detail="El usuario no completó el registro inicial")
     if not db.query(models.Empleado).filter(models.Empleado.identificador == request.verificador).first():
         raise HTTPException(status_code=404, detail="Empleado verificador no encontrado")
-    persona = db.query(models.Persona).filter(models.Persona.identificador == persona_detalle.persona).first()
-    persona.estado = "activo"
+    if db.query(models.Cliente).filter(models.Cliente.identificador == request.personaId).first():
+        raise HTTPException(status_code=409, detail="El usuario ya fue verificado anteriormente")
     db.add(models.Cliente(
         identificador=persona.identificador,
         numeroPais=persona_detalle.pais,
@@ -90,6 +119,8 @@ def login(db: Session, request: schemas.LoginRequest):
     cliente = db.query(models.Cliente).filter(models.Cliente.identificador == persona.identificador).first()
     if not cliente:
         raise HTTPException(status_code=403, detail="El perfil aún no ha sido verificado por un empleado")
+    if cliente.admitido != "si":
+        raise HTTPException(status_code=403, detail="Tu cuenta no fue habilitada. Contactá a la casa de subastas.")
     return schemas.Usuario(
         identificador=persona.identificador,
         nombre=persona.nombre,
@@ -117,6 +148,10 @@ def cambiar_clave(db: Session, request: schemas.CambiarClaveRequest):
 @router.post("/registro/iniciar", response_model=schemas.RegistroIniciarResponse)
 def ep_iniciar_registro(request: schemas.RegistroIniciarRequest, db: Session = Depends(get_db)):
     return iniciar_registro(db, request)
+
+@router.get("/registro/pendientes", response_model=list[schemas.RegistroPendienteResponse])
+def ep_get_pendientes(db: Session = Depends(get_db)):
+    return get_pendientes(db)
 
 @router.post("/registro/aprobar", response_model=schemas.MensajeResponse)
 def ep_aprobar_registro(request: schemas.RegistroVerificacionRequest, db: Session = Depends(get_db)):

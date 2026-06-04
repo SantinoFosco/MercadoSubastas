@@ -41,7 +41,12 @@ export default function SignInScreen() {
       const data = await response.json();
 
       if (response.status === 403) {
-        router.push({ pathname: '/verification', params: { mail: email.trim(), clienteId: String(data.identificador ?? '') } });
+        const detail: string = data.detail ?? '';
+        if (detail.includes('habilitada')) {
+          setError('Tu cuenta no fue habilitada. Contactá a la casa de subastas.');
+        } else {
+          router.push({ pathname: '/verification', params: { mail: email.trim() } });
+        }
         return;
       }
 
@@ -69,14 +74,6 @@ export default function SignInScreen() {
 
       // Guardar sesión (incluye categoria para filtrar el home)
       SessionStore.set(data);
-
-      // Usuario con registro rechazado: puede ingresar pero no operar
-      if (data.admitido === 'no') {
-        router.push('/exploracion');
-        return;
-      }
-
-      // Usuario habilitado normalmente
       router.push('/exploracion');
     } catch {
       setError('No se pudo conectar con el servidor. Verificá tu conexión a internet.');
@@ -203,6 +200,25 @@ export default function SignInScreen() {
           </Pressable>
         </View>
 
+        {/* LINK VERIFICACIÓN */}
+        <View style={styles.verificationHint}>
+          <MaterialCommunityIcons name="clock-outline" size={14} color="#8A6D3B" />
+          <Text style={styles.verificationHintText}>
+            ¿Ya te registraste y esperás aprobación?{' '}
+          </Text>
+          <Pressable
+            onPress={() => {
+              if (!email.trim()) {
+                setError('Ingresá tu mail para verificar el estado de tu registro.');
+                return;
+              }
+              router.push({ pathname: '/verification', params: { mail: email.trim() } });
+            }}
+          >
+            <Text style={styles.verificationHintLink}>Verificar estado</Text>
+          </Pressable>
+        </View>
+
       </ScrollView>
     </SafeAreaView>
   );
@@ -261,4 +277,13 @@ const styles = StyleSheet.create({
   registerLinkSection: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
   registerLinkText: { fontSize: 14, color: '#666' },
   registerLink: { fontSize: 14, fontWeight: '600', color: '#8A6D3B' },
+  // --- Verification Hint ---
+  verificationHint: {
+    flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center',
+    alignItems: 'center', gap: 4, marginTop: 16,
+    backgroundColor: '#FFF8E1', borderRadius: 8,
+    paddingHorizontal: 14, paddingVertical: 10,
+  },
+  verificationHintText: { fontSize: 12, color: '#614F3A' },
+  verificationHintLink: { fontSize: 12, fontWeight: '700', color: '#8A6D3B', textDecorationLine: 'underline' },
 });

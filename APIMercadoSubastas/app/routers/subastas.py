@@ -1,5 +1,4 @@
 import asyncio
-import base64
 import json
 import os
 from datetime import datetime
@@ -11,10 +10,9 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..database import SessionLocal, get_db
+from ..utils import get_foto_b64, CATEGORIA_ORDER
 
 router = APIRouter(tags=["Subastas"])
-
-CATEGORIA_ORDER = {"comun": 1, "especial": 2, "plata": 3, "oro": 4, "platino": 5}
 AUCTION_ITEM_TIMEOUT = int(os.getenv("AUCTION_ITEM_TIMEOUT", "30"))
 
 # Timers activos por item_catalogo_id (compartido con dev.py para poder cancelarlos)
@@ -65,13 +63,6 @@ manager = ConnectionManager()
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _get_foto_b64(db: Session, producto_id: int) -> str | None:
-    foto = db.query(models.Foto).filter(models.Foto.producto == producto_id).first()
-    if foto and foto.foto:
-        return base64.b64encode(foto.foto).decode("utf-8")
-    return None
-
-
 def _vivo_to_dict(vivo: schemas.VivoSubasta) -> dict:
     return {
         "subastaId": vivo.subastaId,
@@ -110,7 +101,7 @@ def create_subasta(db: Session, request: schemas.SubastaCreate):
         subastador=request.subastador, ubicacion=request.ubicacion,
         capacidadAsistentes=request.capacidadAsistentes,
         tieneDeposito=request.tieneDeposito, seguridadPropia=request.seguridadPropia,
-        categoria=request.categoria,
+        categoria=request.categoria, moneda=request.moneda,
     )
     db.add(nuevo)
     db.commit()
@@ -161,6 +152,12 @@ def find_or_create_asistente(db: Session, cliente: int, subasta: int):
         return None, False, "no_encontrado"
     if CATEGORIA_ORDER.get(cliente_obj.categoria or "comun", 0) < CATEGORIA_ORDER.get(subasta_obj.categoria or "comun", 0):
         return None, False, "categoria_insuficiente"
+    multa = db.query(models.Multa).filter(
+        models.Multa.cliente == cliente,
+        models.Multa.pagado == "no",
+    ).first()
+    if multa:
+        return None, False, "multa_pendiente"
 
     max_postor = db.query(func.max(models.Asistente.numeroPostor)).filter(
         models.Asistente.subasta == subasta
@@ -236,7 +233,7 @@ def get_subasta_en_vivo(db: Session, subasta_id: int):
         productoId=item_actual.producto, itemCatalogoId=item_actual.identificador,
         precioBase=precio_base, titulo=pp.titulo if pp else "Sin título",
         precioActual=precio_actual, proximaPuja=prox_puja, pujaMaxima=puja_maxima,
-        tiempoRestante=tiempo_restante, imagen=_get_foto_b64(db, item_actual.producto),
+        tiempoRestante=tiempo_restante, imagen=get_foto_b64(db, item_actual.producto),
         pujasTotales=pujas_totales, incrementosSugeridos=incrementos, actividadReciente=actividad,
     )
 
@@ -249,6 +246,12 @@ def create_pujo(db: Session, request: schemas.PujoRequest):
     item = db.query(models.ItemCatalogo).filter(models.ItemCatalogo.identificador == request.itemId).first()
     if not item:
         return None, "item"
+    if item.subastado == "si":
+        return None, "item_cerrado"
+
+    catalogo = db.query(models.Catalogo).filter(models.Catalogo.identificador == item.catalogo).first()
+    if not catalogo or asistente.subasta != catalogo.subasta:
+        return None, "subasta_incorrecta"
 
     # F2: necesita al menos un medio de pago verificado
     if not db.query(models.MedioPago).filter(
@@ -268,20 +271,24 @@ def create_pujo(db: Session, request: schemas.PujoRequest):
             models.mpChequeCertificado.medio_pago.in_(ids_cheques)
         ).all()
         monto_disponible = sum(float(c.monto_disponible) for c in cheques)
-        pujas_actuales = db.query(func.sum(models.Pujo.importe)).join(
+        pujas_actuales = float(db.query(func.sum(models.Pujo.importe)).join(
             models.Asistente, models.Pujo.asistente == models.Asistente.identificador
         ).filter(
             models.Asistente.cliente == asistente.cliente,
             models.Pujo.ganador == "si",
-        ).scalar()
-        if float(pujas_actuales or 0) + request.importe > monto_disponible:
+        ).scalar() or 0)
+        ya_pagado = float(db.query(func.sum(models.RegistroSubasta.importe)).filter(
+            models.RegistroSubasta.cliente == asistente.cliente,
+            models.RegistroSubasta.pagado == "si",
+        ).scalar() or 0)
+        compromiso_pendiente = max(0.0, pujas_actuales - ya_pagado)
+        if compromiso_pendiente + request.importe > monto_disponible:
             return None, "excede_cheque"
 
     # Validar mínimo y máximo (no aplica a subastas oro/platino)
-    catalogo = db.query(models.Catalogo).filter(models.Catalogo.identificador == item.catalogo).first()
     subasta_obj = db.query(models.Subasta).filter(
         models.Subasta.identificador == catalogo.subasta
-    ).first() if catalogo else None
+    ).first()
     if (subasta_obj.categoria if subasta_obj else "comun") not in ("oro", "platino"):
         max_puja_actual = db.query(func.max(models.Pujo.importe)).filter(models.Pujo.item == request.itemId).scalar()
         precio_actual_val = float(max_puja_actual) if max_puja_actual else float(item.precioBase)
@@ -354,19 +361,25 @@ async def _cerrar_item(item_id: int, subasta_id: int):
                 ganador_nombre = ganador_persona.nombre if ganador_persona else "Desconocido"
                 ganador_cliente_id = asistente.cliente
                 importe_final = float(winning_pujo.importe)
+                comision_monto = round(float(winning_pujo.importe) * float(item.comision) / 100, 2)
                 db.add(models.RegistroSubasta(
                     subasta=subasta_id, duenio=producto.duenio, producto=item.producto,
-                    cliente=asistente.cliente, importe=winning_pujo.importe, comision=item.comision,
+                    cliente=asistente.cliente, importe=winning_pujo.importe, comision=comision_monto,
                 ))
         else:
             # F4: nadie pujó → la empresa compra por el precio base
-            empresa = db.query(models.Persona).filter(models.Persona.documento == "00000000").first()
-            if empresa and producto:
+            empresa_persona = db.query(models.Persona).filter(models.Persona.documento == "00000000").first()
+            empresa_cliente = db.query(models.Cliente).filter(
+                models.Cliente.identificador == empresa_persona.identificador
+            ).first() if empresa_persona else None
+            if empresa_cliente and producto:
                 ganador_nombre = "Casa de Subastas"
+                ganador_cliente_id = empresa_cliente.identificador
                 importe_final = float(item.precioBase)
+                comision_monto = round(float(item.precioBase) * float(item.comision) / 100, 2)
                 db.add(models.RegistroSubasta(
                     subasta=subasta_id, duenio=producto.duenio, producto=item.producto,
-                    cliente=empresa.identificador, importe=item.precioBase, comision=item.comision,
+                    cliente=empresa_cliente.identificador, importe=item.precioBase, comision=comision_monto,
                 ))
 
         db.commit()
@@ -385,6 +398,9 @@ async def _cerrar_item(item_id: int, subasta_id: int):
         vivo = get_subasta_en_vivo(db=db, subasta_id=subasta_id)
         if vivo:
             await manager.broadcast(subasta_id, {"type": "auction_state", "data": _vivo_to_dict(vivo)})
+            next_item_id = vivo.itemCatalogoId
+            if next_item_id not in _item_timers or _item_timers[next_item_id].done():
+                _item_timers[next_item_id] = asyncio.create_task(_cerrar_item(next_item_id, subasta_id))
         else:
             await manager.broadcast(subasta_id, {"type": "auction_ended", "data": {"subastaId": subasta_id}})
 
@@ -422,6 +438,8 @@ def ep_registrar_asistente(request: schemas.AsistenteRegistrarRequest, db: Sessi
         raise HTTPException(status_code=403, detail="Tu categoría no te permite acceder a esta subasta")
     if error == "no_encontrado":
         raise HTTPException(status_code=404, detail="Usuario o subasta no encontrada")
+    if error == "multa_pendiente":
+        raise HTTPException(status_code=403, detail="Tenés una multa pendiente de pago. Debés abonarla antes de participar en otra subasta.")
     return schemas.AsistenteRegistrarResponse(
         identificador=asistente.identificador,
         numeroPostor=asistente.numeroPostor,
@@ -468,6 +486,13 @@ async def ws_subasta(
         vivo = get_subasta_en_vivo(db=db, subasta_id=subasta_id)
         if vivo:
             await websocket.send_text(json.dumps({"type": "auction_state", "data": _vivo_to_dict(vivo)}, default=str))
+            item_id = vivo.itemCatalogoId
+            if item_id not in _item_timers or _item_timers[item_id].done():
+                subasta_obj = db.query(models.Subasta).filter(models.Subasta.identificador == subasta_id).first()
+                if subasta_obj:
+                    subasta_dt = datetime.combine(subasta_obj.fecha, subasta_obj.hora)
+                    if datetime.now() >= subasta_dt:
+                        _item_timers[item_id] = asyncio.create_task(_cerrar_item(item_id, subasta_id))
         else:
             await websocket.send_text(json.dumps({"type": "auction_ended", "data": {"subastaId": subasta_id}}))
         while True:
@@ -484,6 +509,10 @@ async def ep_pujar(request: schemas.PujoRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Asistente no encontrado")
     if error == "item":
         raise HTTPException(status_code=404, detail="Item de catálogo no encontrado")
+    if error == "item_cerrado":
+        raise HTTPException(status_code=409, detail="Este ítem ya fue subastado")
+    if error == "subasta_incorrecta":
+        raise HTTPException(status_code=403, detail="El asistente no pertenece a la subasta de este ítem")
     if error == "sin_medio_verificado":
         raise HTTPException(status_code=403, detail="Necesitás al menos un medio de pago verificado para pujar")
     if error == "excede_cheque":

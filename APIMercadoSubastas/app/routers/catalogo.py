@@ -2,21 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from datetime import datetime
-import base64
 from .. import models, schemas
 from ..database import get_db
+from ..utils import get_foto_b64, CATEGORIA_ORDER
 
 router = APIRouter(tags=["Catálogo y Productos"])
-
-CATEGORIA_ORDER = {"comun": 1, "especial": 2, "plata": 3, "oro": 4, "platino": 5}
-
-# ── CRUD ─────────────────────────────────────────────────────────────────────
-
-def _get_foto_b64(db: Session, producto_id: int) -> str | None:
-    foto = db.query(models.Foto).filter(models.Foto.producto == producto_id).first()
-    if foto and foto.foto:
-        return base64.b64encode(foto.foto).decode("utf-8")
-    return None
 
 
 def get_home(db: Session, categoria: str) -> schemas.HomeResponse:
@@ -93,7 +83,7 @@ def get_home(db: Session, categoria: str) -> schemas.HomeResponse:
             fecha=datetime.combine(s.fecha, s.hora),
             categoria=s.categoria,
             enVivo=_en_vivo(s),
-            imagen=_get_foto_b64(db, prod_id) if prod_id else None,
+            imagen=get_foto_b64(db, prod_id) if prod_id else None,
         ))
 
     return schemas.HomeResponse(subastaDestacada=destacada, subastasGenerales=generales)
@@ -116,7 +106,7 @@ def get_catalogo_subasta(db: Session, subasta_id: int):
             descripcionCorta=producto.descripcionCatalogo if producto else "",
             precioBase=item.precioBase,
             subastado=item.subastado,
-            imagen=_get_foto_b64(db, item.producto),
+            imagen=get_foto_b64(db, item.producto),
         ))
     return result
 
@@ -141,7 +131,7 @@ def get_detalle_producto_catalogo(db: Session, subasta_id: int, producto_id: int
         descripcion=producto.descripcionCompleta if producto else "",
         precioBase=item.precioBase,
         subastado=item.subastado,
-        imagen=_get_foto_b64(db, producto_id),
+        imagen=get_foto_b64(db, producto_id),
     )
 
 

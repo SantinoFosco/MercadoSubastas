@@ -39,6 +39,13 @@ export default function SubastaVivoScreen() {
   const router = useRouter();
   const { subastaId } = useLocalSearchParams<{ subastaId: string }>();
 
+  // ── Redirigir si no hay sesión ──────────────────────────────────────────────
+  useEffect(() => {
+    if (!SessionStore.get()?.identificador) {
+      router.replace('/sign-in');
+    }
+  }, []);
+
   // ── Registro como asistente ─────────────────────────────────────────────────
   const [asistenteId, setAsistenteId] = useState<number | null>(null);
   const [registroError, setRegistroError] = useState<string | null>(null);
@@ -66,6 +73,17 @@ export default function SubastaVivoScreen() {
   }, [subastaId]);
 
   const clienteId = SessionStore.get()?.identificador ?? null;
+
+  // ── Verificar si tiene medio de pago aprobado ───────────────────────────────
+  const [puedePublicar, setPuedePublicar] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (!clienteId) return;
+    fetch(API_ENDPOINTS.mediosPagoCliente(clienteId))
+      .then(res => res.ok ? res.json() : null)
+      .then(data => setPuedePublicar(data?.tieneMedioPagoVerificado ?? false))
+      .catch(() => setPuedePublicar(false));
+  }, [clienteId]);
 
   // ── WebSocket — estado en tiempo real ───────────────────────────────────────
   const { auctionState, isConnected, auctionEnded, soldInfo, connectionError } =
@@ -304,8 +322,40 @@ export default function SubastaVivoScreen() {
           )}
         </View>
 
-        {/* ── 4. Quick Bid Buttons ───────────────────────────────────────── */}
-        {quickBidOptions.length > 0 && (
+        {/* ── 4. Banner "solo observador" si no tiene medio verificado ─────── */}
+        {puedePublicar === false && (
+          <View style={styles.section}>
+            <View style={styles.observerBanner}>
+              <MaterialCommunityIcons name="eye-outline" size={20} color="#1976D2" />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.observerBannerTitle}>Modo observador</Text>
+                <Text style={styles.observerBannerText}>
+                  Para pujar necesitás al menos un medio de pago verificado por la casa de subastas.
+                </Text>
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* ── 6. Error de registro / loading ────────────────────────────── */}
+        {registroError ? (
+          <View style={styles.section}>
+            <View style={styles.errorBanner}>
+              <MaterialCommunityIcons name="alert-circle-outline" size={18} color="#D32F2F" />
+              <Text style={styles.errorBannerText}>{registroError}</Text>
+            </View>
+          </View>
+        ) : asistenteId === null ? (
+          <View style={styles.section}>
+            <View style={styles.infoBanner}>
+              <MaterialCommunityIcons name="loading" size={18} color="#8A6D3B" />
+              <Text style={styles.infoBannerText}>Registrando tu participación…</Text>
+            </View>
+          </View>
+        ) : null}
+
+        {/* ── 7. Quick Bid Buttons ───────────────────────────────────────── */}
+        {quickBidOptions.length > 0 && puedePublicar && (
           <View style={styles.section}>
             <View style={styles.quickBidRow}>
               {quickBidOptions.map((amount) => {
@@ -335,8 +385,8 @@ export default function SubastaVivoScreen() {
           </View>
         )}
 
-        {/* ── 5. Custom Amount Input ─────────────────────────────────────── */}
-        <View style={styles.section}>
+        {/* ── 8. Custom Amount Input ─────────────────────────────────────── */}
+        {puedePublicar && <View style={styles.section}>
           <TextInput
             style={styles.customInput}
             placeholder="Ingresá un incremento personalizado"
@@ -348,27 +398,33 @@ export default function SubastaVivoScreen() {
               if (text.length > 0) setSelectedQuickBid(null);
             }}
           />
-        </View>
+        </View>}
 
-        {/* ── 6. PUJAR AHORA Button ──────────────────────────────────────── */}
+        {/* ── 9. PUJAR AHORA Button ──────────────────────────────────────── */}
         <View style={styles.section}>
           <TouchableOpacity
             style={[
               styles.bidButton,
-              (auctionEnded || isBidding || !asistenteId) && styles.bidButtonDisabled,
+              (auctionEnded || isBidding || !asistenteId || !puedePublicar) && styles.bidButtonDisabled,
             ]}
             onPress={handlePlaceBid}
             activeOpacity={0.8}
-            disabled={auctionEnded || isBidding || !asistenteId}
+            disabled={auctionEnded || isBidding || !asistenteId || !puedePublicar}
           >
             <MaterialCommunityIcons name="gavel" size={20} color="#FFFFFF" style={styles.bidButtonIcon} />
             <Text style={styles.bidButtonText}>
-              {isBidding ? 'PROCESANDO...' : 'PUJAR AHORA'}
+              {isBidding
+                ? 'PROCESANDO...'
+                : !puedePublicar
+                  ? 'SOLO OBSERVADOR'
+                  : asistenteId === null
+                    ? (registroError ? 'NO PODÉS PUJAR' : 'REGISTRANDO...')
+                    : 'PUJAR AHORA'}
             </Text>
           </TouchableOpacity>
         </View>
 
-        {/* ── 7. Disclaimer ──────────────────────────────────────────────── */}
+        {/* ── 8. Disclaimer ──────────────────────────────────────────────── */}
         <Text style={styles.disclaimer}>
           AL PUJAR, ACEPTAS LOS TÉRMINOS Y CONDICIONES Y ASUMES EL COMPROMISO FINANCIERO.
         </Text>
@@ -701,6 +757,36 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     letterSpacing: 0.5,
   },
+
+  // ── Observer Banner ─────────────────────────────────────────────────────────
+  observerBanner: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 12,
+    backgroundColor: '#E3F2FD', borderRadius: 12,
+    borderWidth: 1, borderColor: '#BBDEFB',
+    paddingHorizontal: 16, paddingVertical: 14,
+  },
+  observerBannerTitle: {
+    fontSize: 13, fontWeight: '700', color: '#1565C0', marginBottom: 2,
+  },
+  observerBannerText: {
+    fontSize: 12, color: '#1976D2', lineHeight: 17,
+  },
+
+  // ── Error / Info Banners ────────────────────────────────────────────────────
+  errorBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: '#FFE8E8', borderRadius: 10,
+    borderWidth: 1, borderColor: '#FFCCCC',
+    paddingHorizontal: 14, paddingVertical: 12,
+  },
+  errorBannerText: { flex: 1, fontSize: 13, color: '#D32F2F', fontWeight: '600', lineHeight: 18 },
+  infoBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: '#FFF8E1', borderRadius: 10,
+    borderWidth: 1, borderColor: '#FFE082',
+    paddingHorizontal: 14, paddingVertical: 12,
+  },
+  infoBannerText: { flex: 1, fontSize: 13, color: '#8A6D3B', fontWeight: '500' },
 
   // ── Disclaimer ──────────────────────────────────────────────────────────────
   disclaimer: {

@@ -73,7 +73,7 @@ export default function RegisterStep1() {
       const data = await response.json();
 
       if (response.status === 409) {
-        Alert.alert('Documento ya registrado', 'Ya existe una cuenta con ese número de documento.');
+        Alert.alert('Error', data.detail ?? 'Ya existe una cuenta con esos datos.');
         return;
       }
 
@@ -82,7 +82,7 @@ export default function RegisterStep1() {
         return;
       }
 
-      router.push({ pathname: '/verification', params: { mail: email.trim(), clienteId: String(data.personaId) } });
+      router.push({ pathname: '/verification', params: { mail: email.trim() } });
     } catch {
       Alert.alert('Error de conexión', 'No se pudo conectar con el servidor. Verificá tu conexión a internet.');
     } finally {

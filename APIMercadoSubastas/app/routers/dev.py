@@ -18,6 +18,7 @@ def reset_usuarios(db: Session = Depends(get_db)):
     db.query(models.mpChequeCertificado).delete(synchronize_session=False)
     db.query(models.MedioPago).delete(synchronize_session=False)
     db.query(models.RegistroSubasta).delete(synchronize_session=False)
+    db.query(models.Multa).delete(synchronize_session=False)
     db.query(models.Cliente).delete(synchronize_session=False)
     db.query(models.Duenio).delete(synchronize_session=False)
     db.query(models.Subastador).delete(synchronize_session=False)
@@ -48,6 +49,7 @@ def reset_subasta(subasta_id: int, db: Session = Depends(get_db)):
             models.ItemCatalogo.catalogo == catalogo.identificador
         ).update({"subastado": "no"})
     db.query(models.RegistroSubasta).filter(models.RegistroSubasta.subasta == subasta_id).delete()
+    db.query(models.Multa).filter(models.Multa.subasta == subasta_id).delete()
     db.query(models.Asistente).filter(models.Asistente.subasta == subasta_id).delete()
     db.commit()
     return {"mensaje": f"Subasta {subasta_id} reseteada para testing"}

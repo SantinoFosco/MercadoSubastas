@@ -2,6 +2,7 @@ import React from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 
 type TabKey = 'explorar' | 'mis-pujas' | 'vender' | 'perfil';
 
@@ -11,13 +12,30 @@ interface BottomTabBarProps {
 }
 
 const tabs: { key: TabKey; label: string; icon: string }[] = [
-  { key: 'explorar', label: 'Explorar', icon: 'compass-outline' },
+  { key: 'explorar',  label: 'Explorar',  icon: 'compass-outline' },
   { key: 'mis-pujas', label: 'Mis pujas', icon: 'gavel' },
-  { key: 'vender', label: 'Vender', icon: 'plus-circle-outline' },
-  { key: 'perfil', label: 'Perfil', icon: 'account-outline' },
+  { key: 'vender',    label: 'Vender',    icon: 'plus-circle-outline' },
+  { key: 'perfil',    label: 'Perfil',    icon: 'account-outline' },
 ];
 
+const TAB_ROUTES: Record<TabKey, string> = {
+  'explorar':  '/exploracion',
+  'mis-pujas': '/exploracion',   // sin pantalla propia aún, vuelve al home
+  'vender':    '/vender',
+  'perfil':    '/perfil',
+};
+
 export default function BottomTabBar({ activeTab = 'mis-pujas', onTabPress }: BottomTabBarProps) {
+  const router = useRouter();
+
+  const handlePress = (tab: TabKey) => {
+    if (onTabPress) {
+      onTabPress(tab);
+    } else {
+      router.push(TAB_ROUTES[tab] as any);
+    }
+  };
+
   return (
     <View style={styles.container}>
       {tabs.map((tab) => {
@@ -26,7 +44,7 @@ export default function BottomTabBar({ activeTab = 'mis-pujas', onTabPress }: Bo
           <TouchableOpacity
             key={tab.key}
             style={styles.tab}
-            onPress={() => onTabPress?.(tab.key)}
+            onPress={() => handlePress(tab.key)}
             activeOpacity={0.7}
           >
             {isActive ? (

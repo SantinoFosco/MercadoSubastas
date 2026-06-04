@@ -64,7 +64,8 @@ def create_cuenta_bancaria(db: Session, request: schemas.CuentaBancariaCreate):
     try:
         nuevo_medio = models.MedioPago(
             cliente=request.cliente, tipo="cuenta_bancaria", estado="pendiente",
-            moneda=request.moneda, es_internacional="no", descripcion=request.descripcion,
+            moneda=request.moneda, es_internacional="si" if request.esInternacional else "no",
+            descripcion=request.descripcion,
         )
         db.add(nuevo_medio)
         db.flush()
@@ -239,6 +240,18 @@ def ep_update_medio_pago(medio_pago_id: int, request: schemas.DescripcionUpdate,
     if result is None:
         raise HTTPException(status_code=404, detail="Medio de pago no encontrado")
     return result
+
+@router.put("/{medio_pago_id}/estado", response_model=schemas.MedioPagoItem)
+def ep_update_estado_medio_pago(medio_pago_id: int, estado: str = Query(...), db: Session = Depends(get_db)):
+    if estado not in ("verificado", "rechazado", "pendiente"):
+        raise HTTPException(status_code=422, detail="Estado inválido. Opciones: verificado, rechazado, pendiente")
+    medio = db.query(models.MedioPago).filter(models.MedioPago.identificador == medio_pago_id).first()
+    if not medio:
+        raise HTTPException(status_code=404, detail="Medio de pago no encontrado")
+    medio.estado = estado
+    db.commit()
+    db.refresh(medio)
+    return _build_medio_pago_item(medio, db)
 
 @router.delete("/{medio_pago_id}")
 def ep_delete_medio_pago(medio_pago_id: int, db: Session = Depends(get_db)):

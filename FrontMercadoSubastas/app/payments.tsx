@@ -728,14 +728,26 @@ export default function PaymentsScreen() {
         </View>
 
         {/* 6. BOTÓN CONFIRMAR */}
+        {registeredMethods.length === 0 && (
+          <View style={styles.noMethodWarning}>
+            <MaterialCommunityIcons name="alert-circle-outline" size={18} color="#856404" />
+            <Text style={styles.noMethodWarningText}>
+              Debés registrar al menos un medio de pago para continuar.
+            </Text>
+          </View>
+        )}
         <Button
           mode="contained"
-          onPress={() => router.push('/exploracion/catalogo')}
-          style={styles.submitButton}
+          onPress={() => {
+            if (registeredMethods.length === 0) return;
+            router.replace('/exploracion');
+          }}
+          disabled={registeredMethods.length === 0}
+          style={[styles.submitButton, registeredMethods.length === 0 && styles.submitButtonDisabled]}
           contentStyle={{ height: 56 }}
           labelStyle={styles.submitButtonLabel}
         >
-          Confirmar
+          Ir a explorar subastas
         </Button>
 
       </ScrollView>
@@ -875,5 +887,14 @@ const styles = StyleSheet.create({
   errorText: { fontSize: 13, fontWeight: '500', color: '#D32F2F', flex: 1 },
   // --- Confirm button ---
   submitButton: { width: '100%', backgroundColor: '#FFD700', borderRadius: 8 },
+  submitButtonDisabled: { backgroundColor: '#CCCCCC' },
   submitButtonLabel: { color: 'white', fontWeight: 'bold', fontSize: 16 },
+  // --- No method warning ---
+  noMethodWarning: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: '#FFF3CD', borderRadius: 8,
+    borderWidth: 1, borderColor: '#FFEEBA',
+    paddingHorizontal: 14, paddingVertical: 12, marginBottom: 12,
+  },
+  noMethodWarningText: { flex: 1, fontSize: 13, color: '#856404', lineHeight: 18 },
 });

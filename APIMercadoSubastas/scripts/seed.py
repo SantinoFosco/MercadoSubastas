@@ -283,10 +283,11 @@ def seed_compras_prueba():
             # Registrar venta
             prod = db.query(models.Producto).filter(models.Producto.identificador == item.producto).first()
             if prod:
+                comision_monto = round(float(pujo_ganador.importe) * float(item.comision) / 100, 2)
                 db.add(models.RegistroSubasta(
                     subasta=subasta.identificador, duenio=prod.duenio,
                     producto=item.producto, cliente=cliente_id,
-                    importe=pujo_ganador.importe, comision=item.comision,
+                    importe=pujo_ganador.importe, comision=comision_monto,
                 ))
 
             # Marcar ítem como subastado
