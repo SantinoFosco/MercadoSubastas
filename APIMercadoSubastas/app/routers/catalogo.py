@@ -165,7 +165,14 @@ def ep_delete_producto(producto_id: int, db: Session = Depends(get_db)):
 
 @router.post("/fotos/", response_model=schemas.FotoResponse, status_code=201)
 def ep_create_foto(request: schemas.FotoCreate, db: Session = Depends(get_db)):
-    nueva = models.Foto(producto=request.producto, foto=None)
+    import base64
+    foto_bytes = None
+    if request.imagen:
+        try:
+            foto_bytes = base64.b64decode(request.imagen)
+        except Exception:
+            raise HTTPException(status_code=422, detail="La imagen no es un base64 válido")
+    nueva = models.Foto(producto=request.producto, foto=foto_bytes)
     db.add(nueva)
     db.commit()
     db.refresh(nueva)

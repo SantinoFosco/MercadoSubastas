@@ -1,5 +1,5 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import React from 'react';
 import { Image, ScrollView, StyleSheet, View } from 'react-native';
 import { Appbar, Text } from 'react-native-paper';
@@ -10,6 +10,7 @@ import BottomTabBar from '@/components/BottomTabBar';
 
 export default function UbicacionSeguroScreen() {
   const router = useRouter();
+  const { titulo } = useLocalSearchParams<{ titulo: string }>();
 
   return (
     <SafeAreaView style={styles.container}>
@@ -28,6 +29,7 @@ export default function UbicacionSeguroScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
         {/* ═══ 2. UBICACIÓN DEL LOTE ═══════════════════════════════════════════ */}
+        {titulo ? <Text style={{ fontSize: 20, fontWeight: '700', color: '#1A1A1A', marginBottom: 20 }}>{titulo}</Text> : null}
         <Text style={styles.sectionTitle}>UBICACIÓN DEL LOTE</Text>
 
         <View style={styles.card}>

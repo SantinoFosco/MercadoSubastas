@@ -20,7 +20,7 @@ const tabs: { key: TabKey; label: string; icon: string }[] = [
 
 const TAB_ROUTES: Record<TabKey, string> = {
   'explorar':  '/exploracion',
-  'mis-pujas': '/exploracion',   // sin pantalla propia aún, vuelve al home
+  'mis-pujas': '/mis-pujas',
   'vender':    '/vender',
   'perfil':    '/perfil',
 };
@@ -28,13 +28,12 @@ const TAB_ROUTES: Record<TabKey, string> = {
 export default function BottomTabBar({ activeTab = 'mis-pujas', onTabPress }: BottomTabBarProps) {
   const router = useRouter();
 
-  const handlePress = (tab: TabKey) => {
-    if (onTabPress) {
-      onTabPress(tab);
-    } else {
+  function handleTabPress(tab: TabKey) {
+    onTabPress?.(tab);
+    if (tab !== activeTab) {
       router.push(TAB_ROUTES[tab] as any);
     }
-  };
+  }
 
   return (
     <View style={styles.container}>
@@ -44,7 +43,7 @@ export default function BottomTabBar({ activeTab = 'mis-pujas', onTabPress }: Bo
           <TouchableOpacity
             key={tab.key}
             style={styles.tab}
-            onPress={() => handlePress(tab.key)}
+            onPress={() => handleTabPress(tab.key)}
             activeOpacity={0.7}
           >
             {isActive ? (

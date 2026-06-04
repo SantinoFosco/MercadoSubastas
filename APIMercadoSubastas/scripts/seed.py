@@ -213,6 +213,217 @@ def seed_usuario_prueba_2():
         db.close()
 
 
+def seed_subastas_categorias():
+    """Crea subastas de categorías especial, plata, oro y platino con productos de alta gama."""
+    db = SessionLocal()
+    try:
+        if db.query(models.Persona).filter(models.Persona.documento == "00000003").first():
+            print("✓ Subastas por categoría ya existen, se omite")
+            return
+
+        p_due = db.query(models.Persona).filter(models.Persona.documento == "00000002").first()
+        if not p_due:
+            p_due = models.Persona(nombre="Duenio Prueba 2", documento="00000003", direccion="Av. Rivadavia 3000, CABA", estado="activo")
+            db.add(p_due)
+            db.flush()
+            db.add(models.Duenio(identificador=p_due.identificador, numeroPais=1, verificador=1))
+            db.flush()
+        duenio_id = p_due.identificador
+
+        p_sub = db.query(models.Persona).filter(models.Persona.documento == "00000001").first()
+        subastador_id = db.query(models.Subastador).filter(
+            models.Subastador.identificador == p_sub.identificador
+        ).first().identificador
+
+        from datetime import date as _date, time as _time, timedelta as _td
+        hoy = _date.today()
+
+        datos_categorias = [
+            ("especial", [
+                {
+                    "subasta": {"fecha": hoy + _td(days=10), "hora": _time(14, 0), "ubicacion": "Sala Especial A, Av. Cabildo 100, CABA", "capacidad": 80},
+                    "catalogo": "Subasta Especial — Lote A",
+                    "productos": [
+                        ("Broche victoriano en oro", "Broche victoriano en oro 18k con diamantes de corte antiguo, circa 1880.", "Joyería", "Reino Unido", 200000, 12),
+                        ("Telescopio refractor siglo XIX", "Telescopio refractor de latón, circa 1870, fabricante inglés, longitud 90 cm.", "Instrumentos", "Reino Unido", 175000, 10),
+                    ]
+                },
+            ]),
+            ("plata", [
+                {
+                    "subasta": {"fecha": hoy + _td(days=12), "hora": _time(11, 0), "ubicacion": "Salón Plata, Posadas 1200, CABA", "capacidad": 50},
+                    "catalogo": "Subasta Plata — Lote A",
+                    "productos": [
+                        ("Escultura bronce Art Déco", "Escultura en bronce patinado, estilo Art Déco, figura femenina danzante, circa 1925, 55 cm.", "Escultura", "Francia", 450000, 14),
+                        ("Piano de cola Bösendorfer 1910", "Piano de cola Bösendorfer, modelo 170, Viena circa 1910, restaurado profesionalmente.", "Instrumentos Musicales", "Austria", 1800000, 15),
+                    ]
+                },
+            ]),
+            ("oro", [
+                {
+                    "subasta": {"fecha": hoy + _td(days=15), "hora": _time(15, 0), "ubicacion": "Suite Oro, Alvear Palace Hotel, CABA", "capacidad": 30},
+                    "catalogo": "Subasta Oro — Lote A",
+                    "productos": [
+                        ("Collar diamantes Belle Époque", "Collar en platino con 48 diamantes talla brillante, peso total 12 ct, circa 1905, certificado GIA.", "Alta Joyería", "Francia", 3500000, 18),
+                        ("Reloj Patek Philippe ref. 2499", "Patek Philippe ref. 2499, calendario perpetuo cronógrafo, oro rosa 18k, circa 1960.", "Relojería", "Suiza", 9500000, 18),
+                    ]
+                },
+            ]),
+            ("platino", [
+                {
+                    "subasta": {"fecha": hoy + _td(days=8), "hora": _time(20, 0), "ubicacion": "Penthouse Exclusivo, Puerto Madero, CABA", "capacidad": 15},
+                    "catalogo": "Subasta Platino — Lote A",
+                    "productos": [
+                        ("Obra Picasso — Período Azul", "Óleo sobre lienzo, Pablo Picasso, circa 1903, período azul, autenticado por el Musée Picasso París, 95x75 cm.", "Pintura Moderna", "España", 85000000, 25),
+                        ("Diamante azul — 18 quilates", "Diamante azul fancy vivid, talla cojín, 18.02 ct, certificado GIA FL.", "Gemas", "Sudáfrica", 120000000, 22),
+                    ]
+                },
+            ]),
+        ]
+
+        for categoria, lotes in datos_categorias:
+            for lote in lotes:
+                sd = lote["subasta"]
+                subasta = models.Subasta(
+                    fecha=sd["fecha"], hora=sd["hora"], estado="abierta",
+                    subastador=subastador_id, ubicacion=sd["ubicacion"],
+                    capacidadAsistentes=sd["capacidad"], tieneDeposito="si",
+                    seguridadPropia="si", categoria=categoria,
+                )
+                db.add(subasta)
+                db.flush()
+                catalogo = models.Catalogo(descripcion=lote["catalogo"], subasta=subasta.identificador, responsable=1)
+                db.add(catalogo)
+                db.flush()
+                for desc_corta, desc_larga, cat_pp, procedencia, precio, comision in lote["productos"]:
+                    producto = models.Producto(
+                        descripcionCatalogo=desc_corta, descripcionCompleta=desc_larga,
+                        revisor=1, duenio=duenio_id, disponible="si",
+                    )
+                    db.add(producto)
+                    db.flush()
+                    db.add(models.ProductoPresentacion(
+                        producto=producto.identificador, titulo=desc_corta, categoria=cat_pp,
+                        procedencia=procedencia, declaracionLegal="si", estado="publicado",
+                    ))
+                    db.add(models.ItemCatalogo(
+                        catalogo=catalogo.identificador, producto=producto.identificador,
+                        precioBase=precio, comision=comision, subastado="no",
+                    ))
+                db.flush()
+
+        db.commit()
+        print("✓ Subastas por categoría creadas (especial / plata / oro / platino)")
+    except Exception as e:
+        db.rollback()
+        raise e
+    finally:
+        db.close()
+
+
+def seed_historial_prueba():
+    """Crea historial de pujas para el usuario de prueba (para testear estadísticas)."""
+    db = SessionLocal()
+    try:
+        usuario = db.query(models.PersonaDetalle).filter(
+            models.PersonaDetalle.mail == "prueba@test.com"
+        ).first()
+        if not usuario:
+            return
+
+        cliente_id = usuario.persona
+        if db.query(models.Asistente).filter(models.Asistente.cliente == cliente_id).first():
+            print("✓ Historial de prueba ya existe, se omite")
+            return
+
+        subastas = db.query(models.Subasta).order_by(models.Subasta.identificador).all()
+        if len(subastas) < 2:
+            return
+
+        subasta_1, subasta_2 = subastas[0], subastas[1]
+
+        def items_de_subasta(subasta_id):
+            return (
+                db.query(models.ItemCatalogo)
+                .join(models.Catalogo, models.ItemCatalogo.catalogo == models.Catalogo.identificador)
+                .filter(models.Catalogo.subasta == subasta_id)
+                .all()
+            )
+
+        from datetime import datetime as _dt, timedelta as _td
+        items_s1 = items_de_subasta(subasta_1.identificador)
+        items_s2 = items_de_subasta(subasta_2.identificador)
+
+        asistente_1 = models.Asistente(numeroPostor=10, cliente=cliente_id, subasta=subasta_1.identificador)
+        asistente_2 = models.Asistente(numeroPostor=5,  cliente=cliente_id, subasta=subasta_2.identificador)
+        db.add(asistente_1)
+        db.add(asistente_2)
+        db.flush()
+
+        for i, item in enumerate(items_s1):
+            ganador = "si" if i == 0 else "no"
+            importe = round(float(item.precioBase) * 1.2, 2)
+            pujo = models.Pujo(assitente=asistente_1.identificador, item=item.identificador, importe=importe, ganador=ganador)
+            db.add(pujo)
+            db.flush()
+            db.add(models.HistorialPujos(
+                pujo=pujo.identificador, asistente=asistente_1.identificador,
+                itemCatalogo=item.identificador, cliente=cliente_id,
+                subasta=subasta_1.identificador, importe=importe,
+                fechaHora=_dt.now() - _td(days=20 - i),
+            ))
+            if ganador == "si":
+                producto = db.query(models.Producto).filter(models.Producto.identificador == item.producto).first()
+                db.add(models.RegistroSubasta(
+                    subasta=subasta_1.identificador, duenio=producto.duenio,
+                    producto=item.producto, cliente=cliente_id,
+                    importe=importe, comision=float(item.comision),
+                ))
+
+        for i, item in enumerate(items_s2):
+            ganador = "si" if i == 1 else "no"
+            importe = round(float(item.precioBase) * 1.15, 2)
+            pujo = models.Pujo(assitente=asistente_2.identificador, item=item.identificador, importe=importe, ganador=ganador)
+            db.add(pujo)
+            db.flush()
+            db.add(models.HistorialPujos(
+                pujo=pujo.identificador, asistente=asistente_2.identificador,
+                itemCatalogo=item.identificador, cliente=cliente_id,
+                subasta=subasta_2.identificador, importe=importe,
+                fechaHora=_dt.now() - _td(days=5 - i),
+            ))
+            if ganador == "si":
+                producto = db.query(models.Producto).filter(models.Producto.identificador == item.producto).first()
+                db.add(models.RegistroSubasta(
+                    subasta=subasta_2.identificador, duenio=producto.duenio,
+                    producto=item.producto, cliente=cliente_id,
+                    importe=importe, comision=float(item.comision),
+                ))
+
+        db.commit()
+        print("✓ Historial de pujas de prueba creado")
+    except Exception as e:
+        db.rollback()
+        raise e
+    finally:
+        db.close()
+
+
+def seed_configuracion():
+    """Carga la configuración inicial de la empresa (dirección de inspección)."""
+    db = SessionLocal()
+    try:
+        if not db.get(models.ConfiguracionEmpresa, "direccion_inspeccion"):
+            db.add(models.ConfiguracionEmpresa(
+                clave="direccion_inspeccion",
+                valor="Av. Corrientes 1234, Piso 3, CABA — Lunes a Viernes 9-17hs",
+            ))
+            db.commit()
+        print("✓ Configuración de empresa cargada")
+    finally:
+        db.close()
+
+
 def seed_compras_prueba():
     """
     Simula que el usuario de prueba ganó 2 ítems en subasta_1.
@@ -314,6 +525,9 @@ if __name__ == "__main__":
         seed_empleados()
         seed_empresa()
         seed_subastas()
+        seed_subastas_categorias()
         seed_usuario_prueba()
         seed_usuario_prueba_2()
+        seed_historial_prueba()
+        seed_configuracion()
         print("\nSeed completo. Para agregar compras de prueba: python -m scripts.seed compras")

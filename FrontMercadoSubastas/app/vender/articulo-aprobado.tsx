@@ -1,8 +1,10 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import React from 'react';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   Image,
+  Pressable,
   ScrollView,
   StyleSheet,
   TouchableOpacity,
@@ -11,11 +13,61 @@ import {
 import { Appbar, Text } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import BottomTabBar from '@/components/BottomTabBar';
+import { API_ENDPOINTS } from '@/constants/api';
+
+type Condiciones = {
+  tieneCondiciones: boolean;
+  precioBase: number | null;
+  comision: number | null;
+  subastaFecha: string | null;
+  subastaHora: string | null;
+  subastaUbicacion: string | null;
+  aceptacion: string | null;
+};
+
+function formatMonto(n: number) {
+  return `$${n.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function ArticuloAprobadoScreen() {
   const router = useRouter();
+  const { titulo, categoria, productoId } = useLocalSearchParams<{ titulo: string; categoria: string; productoId: string }>();
+  const [condiciones, setCondiciones] = useState<Condiciones | null>(null);
+  const [loadingCondiciones, setLoadingCondiciones] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!productoId) { setLoadingCondiciones(false); return; }
+    fetch(API_ENDPOINTS.condicionesArticulo(productoId))
+      .then((r) => r.json())
+      .then((data) => setCondiciones(data))
+      .catch(() => {})
+      .finally(() => setLoadingCondiciones(false));
+  }, [productoId]);
+
+  const handleAceptar = async () => {
+    if (!productoId) return;
+    setSubmitting(true);
+    try {
+      await fetch(API_ENDPOINTS.aceptarCondiciones(productoId), { method: 'POST' });
+      router.push({ pathname: '/vender/ubicacion-seguro', params: { titulo } });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleRechazar = async () => {
+    if (!productoId) return;
+    setSubmitting(true);
+    try {
+      await fetch(API_ENDPOINTS.rechazarCondiciones(productoId), { method: 'POST' });
+      router.back();
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -51,43 +103,67 @@ export default function ArticuloAprobadoScreen() {
 
         {/* 4. PRODUCT CARD */}
         <View style={styles.productCard}>
-          {/* Image area */}
           <View style={styles.productImageArea}>
             <MaterialCommunityIcons name="headphones" size={80} color="#CCCCCC" />
           </View>
-
-          {/* Product info */}
           <View style={styles.productInfo}>
-            <Text style={styles.productCategory}>CATEGORÍA: ELECTRÓNICA</Text>
-            <Text style={styles.productTitle}>Auriculares profesionales</Text>
+            <Text style={styles.productCategory}>CATEGORÍA: {(categoria ?? '').toUpperCase()}</Text>
+            <Text style={styles.productTitle}>{titulo ?? 'Artículo'}</Text>
           </View>
         </View>
 
         {/* 5. PRICE INFO */}
-        <View style={styles.priceRow}>
-          <Text style={styles.priceLabel}>Precio Base</Text>
-          <Text style={styles.priceValue}>$15,000.00</Text>
-        </View>
+        {loadingCondiciones ? (
+          <ActivityIndicator color="#FFD700" style={{ marginBottom: 16 }} />
+        ) : (
+          <>
+            <View style={styles.priceRow}>
+              <Text style={styles.priceLabel}>Precio Base</Text>
+              <Text style={styles.priceValue}>
+                {condiciones?.precioBase != null ? formatMonto(condiciones.precioBase) : 'Pendiente'}
+              </Text>
+            </View>
 
-        {/* 6. ESTIMATED EARNINGS CARD */}
-        <View style={styles.earningsCard}>
-          <View style={styles.earningsLeft}>
-            <Text style={styles.earningsLabel}>GANANCIA ESTIMADA</Text>
-            <Text style={styles.earningsValue}>~$12,750.00</Text>
-          </View>
-          <View style={styles.earningsIconCircle}>
-            <MaterialCommunityIcons name="calculator" size={24} color="#2E7D32" />
-          </View>
-        </View>
+            {condiciones?.subastaFecha && (
+              <View style={styles.priceRow}>
+                <Text style={styles.priceLabel}>Fecha de subasta</Text>
+                <Text style={styles.priceValue}>{condiciones.subastaFecha}</Text>
+              </View>
+            )}
 
-        {/* 7. CTA BUTTON */}
+            {/* 6. ESTIMATED EARNINGS CARD */}
+            <View style={styles.earningsCard}>
+              <View style={styles.earningsLeft}>
+                <Text style={styles.earningsLabel}>GANANCIA ESTIMADA</Text>
+                <Text style={styles.earningsValue}>
+                  {condiciones?.precioBase != null && condiciones?.comision != null
+                    ? formatMonto(condiciones.precioBase * (1 - condiciones.comision / 100))
+                    : 'Pendiente'}
+                </Text>
+              </View>
+              <View style={styles.earningsIconCircle}>
+                <MaterialCommunityIcons name="calculator" size={24} color="#2E7D32" />
+              </View>
+            </View>
+          </>
+        )}
+
+        {/* 7. CTA BUTTONS */}
         <TouchableOpacity
-          style={styles.ctaButton}
+          style={[styles.ctaButton, submitting && { opacity: 0.6 }]}
           activeOpacity={0.85}
-          onPress={() => router.push('/vender/ubicacion-seguro')}
+          onPress={handleAceptar}
+          disabled={submitting}
         >
-          <Text style={styles.ctaButtonText}>Aceptar y Continuar →</Text>
+          {submitting
+            ? <ActivityIndicator color="#FFF" />
+            : <Text style={styles.ctaButtonText}>Aceptar y Continuar →</Text>
+          }
         </TouchableOpacity>
+
+        <Pressable onPress={handleRechazar} disabled={submitting} style={{ alignItems: 'center', marginTop: 12 }}>
+          <Text style={{ color: '#E53935', fontWeight: '600', fontSize: 14 }}>Rechazar condiciones</Text>
+        </Pressable>
 
       </ScrollView>
 

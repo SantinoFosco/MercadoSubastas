@@ -317,6 +317,7 @@ class ProductoResponse(BaseModel):
 
 class FotoCreate(BaseModel):
     producto: int
+    imagen: Optional[str] = None  # base64
 
 class FotoResponse(BaseModel):
     identificador: int
@@ -425,6 +426,65 @@ class AsistenteRegistrarResponse(BaseModel):
     cliente: int
     subasta: int
     creado: bool
+
+#------------------ Configuración empresa ------------------#
+
+class ConfiguracionResponse(BaseModel):
+    clave: str
+    valor: str
+
+#------------------ Condiciones de artículo ----------------#
+
+class ArticuloCondicionesResponse(BaseModel):
+    productoId: int
+    titulo: str
+    tieneCondiciones: bool
+    precioBase: Optional[float] = None
+    comision: Optional[float] = None
+    subastaFecha: Optional[date] = None
+    subastaHora: Optional[time] = None
+    subastaUbicacion: Optional[str] = None
+    aceptacion: Optional[str] = None  # 'pendiente' | 'aceptado' | 'rechazado'
+
+#------------------ Vender ---------------------------------#
+
+class ArticuloSubmitRequest(BaseModel):
+    titulo: str
+    categoria: str
+    descripcionCompleta: str
+    procedencia: Optional[str] = None
+    declaracionLegal: bool = False
+    clienteId: int
+
+class ArticuloSubmitResponse(BaseModel):
+    productoId: int
+    presentacionId: int
+    mensaje: str
+
+class ArticuloListItem(BaseModel):
+    productoId: int
+    presentacionId: int
+    titulo: str
+    categoria: str
+    fechaEnvio: Optional[date]
+    estadoInspeccion: str
+    observaciones: Optional[str]
+    costoDevolucion: Optional[float]
+    enSubasta: bool
+
+#------------------ Estadísticas ---------------------------#
+
+class HistorialItemEstadisticas(BaseModel):
+    titulo: str
+    fecha: datetime
+    importe: float
+    ganada: bool
+
+class EstadisticasCliente(BaseModel):
+    subastasTotales: int
+    pujasGanadas: int
+    totalInvertido: float
+    historial: list[HistorialItemEstadisticas]
 
 #------------------ Ventas ---------------------------------#
 

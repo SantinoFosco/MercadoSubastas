@@ -1,5 +1,5 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import React from 'react';
 import {
   Image,
@@ -12,30 +12,11 @@ import { Appbar, Text } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import BottomTabBar from '@/components/BottomTabBar';
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-type RejectionReason = {
-  title: string;
-  detail: string;
-};
-
-// ── Mock Data ─────────────────────────────────────────────────────────────────
-
-const REJECTION_REASONS: RejectionReason[] = [
-  {
-    title: 'Desgaste en base y herrajes',
-    detail: 'Se detectaron reparaciones profundas no declaradas en los soportes metálicos.',
-  },
-  {
-    title: 'Inconsistencia en forro interior',
-    detail: 'La textura del forro no coincide con los estándares de la temporada 2027.',
-  },
-];
-
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function InspeccionRechazadaScreen() {
   const router = useRouter();
+  const { titulo, observaciones, costoDevolucion } = useLocalSearchParams<{ titulo: string; observaciones: string; costoDevolucion: string }>();
 
   return (
     <SafeAreaView style={styles.container}>
@@ -76,29 +57,28 @@ export default function InspeccionRechazadaScreen() {
           </View>
           {/* Item badge */}
           <View style={styles.itemBadge}>
-            <Text style={styles.itemBadgeText}>ITEM #AU-0521</Text>
+            <Text style={styles.itemBadgeText}>{titulo ?? 'Artículo'}</Text>
           </View>
         </View>
 
         {/* 5. REJECTION REASONS CARD */}
         <View style={styles.reasonsCard}>
           <Text style={styles.reasonsTitle}>MOTIVOS DEL RECHAZO</Text>
-
-          {REJECTION_REASONS.map((reason, index) => (
-            <View key={index} style={styles.reasonItem}>
-              <View style={styles.reasonBulletRow}>
-                <View style={styles.redDot} />
-                <Text style={styles.reasonItemTitle}>{reason.title}</Text>
-              </View>
-              <Text style={styles.reasonItemDetail}>{reason.detail}</Text>
+          <View style={styles.reasonItem}>
+            <View style={styles.reasonBulletRow}>
+              <View style={styles.redDot} />
+              <Text style={styles.reasonItemTitle}>Observaciones del inspector</Text>
             </View>
-          ))}
+            <Text style={styles.reasonItemDetail}>{observaciones || 'Sin observaciones registradas.'}</Text>
+          </View>
         </View>
 
         {/* 6. RETURN COST */}
         <View style={styles.returnCostRow}>
           <Text style={styles.returnCostLabel}>Costo de Devolución</Text>
-          <Text style={styles.returnCostValue}>$250 dolares</Text>
+          <Text style={styles.returnCostValue}>
+            {costoDevolucion ? `$${parseFloat(costoDevolucion).toLocaleString('es-AR')}` : 'A confirmar'}
+          </Text>
         </View>
 
         {/* 7. CTA BUTTON */}

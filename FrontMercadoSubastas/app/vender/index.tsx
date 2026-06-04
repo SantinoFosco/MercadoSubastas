@@ -1,19 +1,22 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
+  ActivityIndicator,
+  Pressable,
   ScrollView,
   StyleSheet,
+  TextInput,
   View,
   Image,
-  Pressable,
-  TextInput,
 } from 'react-native';
 import { Appbar, Text, Menu } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import BottomTabBar from '@/components/BottomTabBar';
+import { API_ENDPOINTS } from '@/constants/api';
+import { SessionStore } from '@/store/session';
+import * as ImagePicker from 'expo-image-picker';
 
-// ── Category options ──
 const CATEGORY_OPTIONS = [
   'Relojería de Lujo',
   'Vehículos',
@@ -23,7 +26,6 @@ const CATEGORY_OPTIONS = [
   'Moda y Accesorios',
 ];
 
-// ── Image slot definitions ──
 const IMAGE_SLOTS = [
   { label: 'PRINCIPAL', icon: 'camera-outline' as const },
   { label: 'ÁNGULO 2', icon: 'image-outline' as const },
@@ -36,15 +38,77 @@ const IMAGE_SLOTS = [
 export default function SubastarArticuloScreen() {
   const router = useRouter();
 
-  // ── Form state ──
   const [articleName, setArticleName] = useState('');
   const [category, setCategory] = useState('Relojería de Lujo');
   const [categoryMenuVisible, setCategoryMenuVisible] = useState(false);
   const [description, setDescription] = useState('');
   const [history, setHistory] = useState('');
   const [isChecked, setIsChecked] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [uploadedFotos, setUploadedFotos] = useState<Record<number, string>>({});
+  const [productoId, setProductoId] = useState<number | null>(null);
 
-  // ── Section Header Component ──
+  const canSubmit = articleName.trim() && description.trim() && isChecked && !isLoading;
+
+  const handleSlotPress = async (slotIndex: number, currentProductoId: number | null) => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') return;
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      base64: true,
+      quality: 0.6,
+    });
+    if (result.canceled || !result.assets[0].base64) return;
+    const base64 = result.assets[0].base64;
+    if (!currentProductoId) return;
+    try {
+      await fetch(API_ENDPOINTS.subirFoto, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ producto: currentProductoId, imagen: base64 }),
+      });
+      setUploadedFotos((prev) => ({ ...prev, [slotIndex]: result.assets[0].uri }));
+    } catch {}
+  };
+
+  const handleSubmit = async () => {
+    const session = SessionStore.get();
+    if (!session) {
+      router.replace('/sign-in');
+      return;
+    }
+
+    setError('');
+    setIsLoading(true);
+    try {
+      const res = await fetch(API_ENDPOINTS.submitArticulo, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          titulo: articleName.trim(),
+          categoria: category,
+          descripcionCompleta: description.trim(),
+          procedencia: history.trim() || null,
+          declaracionLegal: isChecked,
+          clienteId: session.identificador,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        setError(data.detail ?? 'Error al enviar el artículo.');
+        return;
+      }
+      const data = await res.json();
+      setProductoId(data.productoId);
+      router.push('/vender/mis-articulos');
+    } catch {
+      setError('No se pudo conectar con el servidor.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const SectionHeader = ({ title }: { title: string }) => (
     <View style={styles.sectionHeader}>
       <View style={styles.sectionHeaderBar} />
@@ -54,8 +118,6 @@ export default function SubastarArticuloScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-
-      {/* ── 1. APPBAR ── */}
       <Appbar.Header style={styles.appbar}>
         <Appbar.BackAction onPress={() => router.back()} color="#614F3A" />
         <Image
@@ -71,16 +133,10 @@ export default function SubastarArticuloScreen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-
-        {/* ── 2. TITLE ── */}
         <Text style={styles.pageTitle}>Subastar Artículo</Text>
 
-        {/* ══════════════════════════════════════════════ */}
-        {/* ── 3. SECTION: Detalles del Lote ── */}
-        {/* ══════════════════════════════════════════════ */}
         <SectionHeader title="Detalles del Lote" />
 
-        {/* Field: Nombre del Artículo */}
         <Text style={styles.inputLabel}>NOMBRE DEL ARTÍCULO</Text>
         <TextInput
           style={styles.textInput}
@@ -90,7 +146,6 @@ export default function SubastarArticuloScreen() {
           placeholderTextColor="#999"
         />
 
-        {/* Field: Categoría */}
         <Text style={styles.inputLabel}>CATEGORÍA</Text>
         <Menu
           visible={categoryMenuVisible}
@@ -108,22 +163,15 @@ export default function SubastarArticuloScreen() {
           {CATEGORY_OPTIONS.map((opt) => (
             <Menu.Item
               key={opt}
-              onPress={() => {
-                setCategory(opt);
-                setCategoryMenuVisible(false);
-              }}
+              onPress={() => { setCategory(opt); setCategoryMenuVisible(false); }}
               title={opt}
               titleStyle={{ color: '#333' }}
             />
           ))}
         </Menu>
 
-        {/* ══════════════════════════════════════════════ */}
-        {/* ── 4. SECTION: Narrativa del Lote ── */}
-        {/* ══════════════════════════════════════════════ */}
         <SectionHeader title="Narrativa del Lote" />
 
-        {/* Field: Descripción Detallada */}
         <Text style={styles.inputLabel}>DESCRIPCIÓN DETALLADA</Text>
         <TextInput
           style={[styles.textInput, styles.textInputMultiline, { height: 100 }]}
@@ -135,7 +183,6 @@ export default function SubastarArticuloScreen() {
           textAlignVertical="top"
         />
 
-        {/* Field: Historial (Proveniencia) */}
         <Text style={styles.inputLabel}>HISTORIAL (PROVENIENCIA)</Text>
         <TextInput
           style={[styles.textInput, styles.textInputMultiline, { height: 80 }]}
@@ -147,47 +194,37 @@ export default function SubastarArticuloScreen() {
           textAlignVertical="top"
         />
 
-        {/* ══════════════════════════════════════════════ */}
-        {/* ── 5. SECTION: Galería de Imágenes ── */}
-        {/* ══════════════════════════════════════════════ */}
         <SectionHeader title="Galería de Imágenes" />
 
         <View style={styles.imageGrid}>
-          {IMAGE_SLOTS.map((slot, index) => (
-            <Pressable key={slot.label} style={styles.imageSlot}>
-              <View style={styles.imageSlotContent}>
-                <MaterialCommunityIcons
-                  name={slot.icon as any}
-                  size={40}
-                  color="#D0D0D0"
-                />
-                <Text style={styles.imageSlotLabel}>{slot.label}</Text>
-              </View>
-
-              {/* "EN ARCHIVO" badge — only on the first (PRINCIPAL) slot */}
-              {index === 0 && (
-                <View style={styles.enArchivoBadge}>
-                  <Text style={styles.enArchivoBadgeText}>EN ARCHIVO</Text>
+          {IMAGE_SLOTS.map((slot, index) => {
+            const uploaded = !!uploadedFotos[index];
+            return (
+              <Pressable key={slot.label} style={styles.imageSlot} onPress={() => handleSlotPress(index, productoId)}>
+                <View style={styles.imageSlotContent}>
+                  <MaterialCommunityIcons
+                    name={uploaded ? 'check-circle' : slot.icon as any}
+                    size={40}
+                    color={uploaded ? '#4CAF50' : '#D0D0D0'}
+                  />
+                  <Text style={styles.imageSlotLabel}>{slot.label}</Text>
                 </View>
-              )}
-            </Pressable>
-          ))}
+                {index === 0 && !uploaded && (
+                  <View style={styles.enArchivoBadge}>
+                    <Text style={styles.enArchivoBadgeText}>EN ARCHIVO</Text>
+                  </View>
+                )}
+              </Pressable>
+            );
+          })}
         </View>
 
-        {/* ══════════════════════════════════════════════ */}
-        {/* ── 6. LEGAL CHECKBOX ── */}
-        {/* ══════════════════════════════════════════════ */}
         <View style={styles.legalRow}>
           <Pressable
             onPress={() => setIsChecked(!isChecked)}
-            style={[
-              styles.checkbox,
-              isChecked && styles.checkboxChecked,
-            ]}
+            style={[styles.checkbox, isChecked && styles.checkboxChecked]}
           >
-            {isChecked && (
-              <MaterialCommunityIcons name="check" size={16} color="white" />
-            )}
+            {isChecked && <MaterialCommunityIcons name="check" size={16} color="white" />}
           </Pressable>
           <Text style={styles.legalText}>
             Declaro que el bien me pertenece y no posee impedimentos legales,
@@ -195,238 +232,59 @@ export default function SubastarArticuloScreen() {
           </Text>
         </View>
 
-        {/* ══════════════════════════════════════════════ */}
-        {/* ── 7. SUBMIT BUTTON ── */}
-        {/* ══════════════════════════════════════════════ */}
+        {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
         <Pressable
-          style={styles.submitButton}
-          onPress={() => router.push('/vender/mis-articulos')}
+          style={[styles.submitButton, !canSubmit && styles.submitButtonDisabled]}
+          onPress={handleSubmit}
+          disabled={!canSubmit}
         >
-          <Text style={styles.submitButtonText}>CONTINUAR A PRECIOS</Text>
+          {isLoading
+            ? <ActivityIndicator color="#FFF" />
+            : <Text style={styles.submitButtonText}>ENVIAR ARTÍCULO</Text>
+          }
         </Pressable>
 
-        {/* Bottom spacing for tab bar */}
         <View style={{ height: 8 }} />
-
       </ScrollView>
 
-      {/* ── 8. BOTTOM TAB BAR ── */}
       <BottomTabBar
         activeTab="vender"
         onTabPress={(tab) => {
           if (tab === 'explorar') router.push('/exploracion');
-          if (tab === 'mis-pujas') router.push('/exploracion');
-          if (tab === 'perfil') router.push('/exploracion');
+          if (tab === 'perfil') router.push('/perfil');
         }}
       />
     </SafeAreaView>
   );
 }
 
-// ═══════════════════════════════════════════════════
-// ── STYLES ──
-// ═══════════════════════════════════════════════════
 const styles = StyleSheet.create({
-  // ── Container ──
-  container: {
-    flex: 1,
-    backgroundColor: '#FAFBFD',
-  },
-
-  // ── Appbar ──
-  appbar: {
-    backgroundColor: 'transparent',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
-    elevation: 0,
-  },
-  logoBadge: {
-    width: 50,
-    height: 35,
-  },
-
-  // ── Scroll ──
-  scrollContent: {
-    paddingHorizontal: 24,
-    paddingVertical: 20,
-    paddingBottom: 40,
-  },
-
-  // ── Page Title ──
-  pageTitle: {
-    fontSize: 26,
-    fontWeight: '800',
-    color: '#1A1A1A',
-    marginBottom: 24,
-  },
-
-  // ── Section Header ──
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
-    marginTop: 8,
-  },
-  sectionHeaderBar: {
-    width: 4,
-    height: 20,
-    backgroundColor: '#FFD700',
-    borderRadius: 2,
-    marginRight: 10,
-  },
-  sectionHeaderText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#1A1A1A',
-  },
-
-  // ── Form Labels ──
-  inputLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#999',
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
-    marginBottom: 8,
-    marginTop: 4,
-  },
-
-  // ── Text Inputs (flat style, no outline) ──
-  textInput: {
-    backgroundColor: '#F5F5F5',
-    borderRadius: 10,
-    height: 52,
-    paddingHorizontal: 16,
-    fontSize: 14,
-    color: '#1A1A1A',
-    marginBottom: 16,
-  },
-  textInputMultiline: {
-    paddingTop: 14,
-    paddingBottom: 14,
-  },
-
-  // ── Picker / Dropdown ──
-  pickerContainer: {
-    backgroundColor: '#F5F5F5',
-    borderRadius: 10,
-    height: 52,
-    paddingHorizontal: 16,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  pickerText: {
-    color: '#1A1A1A',
-    fontSize: 14,
-  },
-
-  // ── Image Gallery Grid ──
-  imageGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 14,
-    marginBottom: 24,
-    justifyContent: 'space-between',
-  },
-  imageSlot: {
-    width: '48%',
-    aspectRatio: 1,
-    borderStyle: 'solid',
-    borderWidth: 2,
-    borderColor: '#E0E0E0',
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#F8F9FB',
-    position: 'relative',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 3,
-    paddingHorizontal: 8,
-  },
-  imageSlotContent: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexDirection: 'column',
-  },
-  imageSlotLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#666',
-    textTransform: 'uppercase',
-    marginTop: 8,
-    letterSpacing: 0.8,
-  },
-  enArchivoBadge: {
-    position: 'absolute',
-    bottom: 10,
-    backgroundColor: '#FFD700',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-    shadowColor: '#FFD700',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  enArchivoBadgeText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#333',
-  },
-
-  // ── Legal Checkbox ──
-  legalRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 24,
-    gap: 12,
-    backgroundColor: 'rgba(26, 26, 26, 0.04)',
-    padding: 16,
-    borderRadius: 12,
-    borderLeftWidth: 4,
-    borderLeftColor: '#FFD700',
-  },
-  checkbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: '#FFD700',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 2,
-    backgroundColor: '#FFFFFF',
-  },
-  checkboxChecked: {
-    backgroundColor: '#FFD700',
-    borderColor: '#FFD700',
-  },
-  legalText: {
-    flex: 1,
-    fontSize: 13,
-    color: '#333',
-    lineHeight: 19,
-    fontWeight: '500',
-  },
-
-  // ── Submit Button ──
-  submitButton: {
-    backgroundColor: '#FFD700',
-    height: 56,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  submitButtonText: {
-    color: 'white',
-    fontWeight: '700',
-    fontSize: 16,
-    letterSpacing: 0.5,
-  },
+  container: { flex: 1, backgroundColor: '#FAFBFD' },
+  appbar: { backgroundColor: 'transparent', borderBottomWidth: 1, borderBottomColor: '#F0F0F0', elevation: 0 },
+  logoBadge: { width: 50, height: 35 },
+  scrollContent: { paddingHorizontal: 24, paddingVertical: 20, paddingBottom: 40 },
+  pageTitle: { fontSize: 26, fontWeight: '800', color: '#1A1A1A', marginBottom: 24 },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 20, marginTop: 8 },
+  sectionHeaderBar: { width: 4, height: 20, backgroundColor: '#FFD700', borderRadius: 2, marginRight: 10 },
+  sectionHeaderText: { fontSize: 16, fontWeight: '700', color: '#1A1A1A' },
+  inputLabel: { fontSize: 11, fontWeight: '700', color: '#999', letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 8, marginTop: 4 },
+  textInput: { backgroundColor: '#F5F5F5', borderRadius: 10, height: 52, paddingHorizontal: 16, fontSize: 14, color: '#1A1A1A', marginBottom: 16 },
+  textInputMultiline: { paddingTop: 14, paddingBottom: 14 },
+  pickerContainer: { backgroundColor: '#F5F5F5', borderRadius: 10, height: 52, paddingHorizontal: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  pickerText: { color: '#1A1A1A', fontSize: 14 },
+  imageGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, marginBottom: 24, justifyContent: 'space-between' },
+  imageSlot: { width: '48%', aspectRatio: 1, borderStyle: 'solid', borderWidth: 2, borderColor: '#E0E0E0', borderRadius: 16, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F8F9FB', position: 'relative', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 3, paddingHorizontal: 8 },
+  imageSlotContent: { justifyContent: 'center', alignItems: 'center', flexDirection: 'column' },
+  imageSlotLabel: { fontSize: 11, fontWeight: '700', color: '#666', textTransform: 'uppercase', marginTop: 8, letterSpacing: 0.8 },
+  enArchivoBadge: { position: 'absolute', bottom: 10, backgroundColor: '#FFD700', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 },
+  enArchivoBadgeText: { fontSize: 10, fontWeight: '800', color: '#333' },
+  legalRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 24, gap: 12, backgroundColor: 'rgba(26,26,26,0.04)', padding: 16, borderRadius: 12, borderLeftWidth: 4, borderLeftColor: '#FFD700' },
+  checkbox: { width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: '#FFD700', justifyContent: 'center', alignItems: 'center', marginTop: 2, backgroundColor: '#FFFFFF' },
+  checkboxChecked: { backgroundColor: '#FFD700', borderColor: '#FFD700' },
+  legalText: { flex: 1, fontSize: 13, color: '#333', lineHeight: 19, fontWeight: '500' },
+  errorText: { fontSize: 13, color: '#D32F2F', textAlign: 'center', marginBottom: 16 },
+  submitButton: { backgroundColor: '#FFD700', height: 56, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  submitButtonDisabled: { backgroundColor: '#CCCCCC' },
+  submitButtonText: { color: 'white', fontWeight: '700', fontSize: 16, letterSpacing: 0.5 },
 });

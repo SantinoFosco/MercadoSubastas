@@ -73,7 +73,15 @@ export default function SignInScreen() {
       }
 
       // Guardar sesión (incluye categoria para filtrar el home)
-      SessionStore.set(data);
+      await SessionStore.save(data);
+
+      // Usuario con registro rechazado: puede ingresar pero no operar
+      if (data.admitido === 'no') {
+        router.push('/exploracion');
+        return;
+      }
+
+      // Usuario habilitado normalmente
       router.push('/exploracion');
     } catch {
       setError('No se pudo conectar con el servidor. Verificá tu conexión a internet.');

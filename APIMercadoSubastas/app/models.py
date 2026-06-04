@@ -121,7 +121,6 @@ class Subasta(Base):
     moneda    = Column(String, nullable=False, server_default="ARS")
 
     __table_args__ = (
-        CheckConstraint("fecha > (CURRENT_DATE + INTERVAL '10 days')", name="chkFecha"),
         CheckConstraint("estado IN ('abierta', 'cerrada')", name="chkEstado"),
         CheckConstraint("\"tieneDeposito\" IN ('si', 'no')", name="chkTD"),
         CheckConstraint("\"seguridadPropia\" IN ('si', 'no')", name="chkSP"),
@@ -331,4 +330,22 @@ class InspeccionProducto(Base):
     __table_args__ = (
         CheckConstraint("estado IN ('pendiente', 'aprobado', 'rechazado')", name="chkEstadoInspeccion"),
         CheckConstraint("costo_devolucion >= 0", name="chkCostoDevolucion"),
+    )
+
+class ConfiguracionEmpresa(Base):
+    __tablename__ = "configuracion_empresa"
+
+    clave = Column(String, primary_key=True, index=True)
+    valor = Column(String, nullable=False)
+
+class AceptacionArticulo(Base):
+    __tablename__ = "aceptacion_articulos"
+
+    identificador = Column(Integer, primary_key=True, index=True)
+    producto = Column(Integer, ForeignKey("productos.identificador"), nullable=False, unique=True)
+    estado = Column(String, nullable=False, server_default="pendiente")
+    fecha = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint("estado IN ('pendiente', 'aceptado', 'rechazado')", name="chkEstadoAceptacion"),
     )

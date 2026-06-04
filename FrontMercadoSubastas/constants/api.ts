@@ -43,4 +43,16 @@ export const API_ENDPOINTS = {
                         `${API_BASE_URL}/subasta/${subastaId}/${clienteId}/compras/pagar?metodoPagoId=${metodoPagoId}`,
   mediosPagoCliente:  (clienteId: number | string) =>
                         `${API_BASE_URL}/mediosPago?cliente_id=${clienteId}`,
+  // Vender
+  submitArticulo:        `${API_BASE_URL}/articulos/`,
+  misArticulos:          (id: number | string) => `${API_BASE_URL}/clientes/${id}/articulos`,
+  subirFoto:             `${API_BASE_URL}/fotos/`,
+  configEmpresa:         (clave: string) => `${API_BASE_URL}/config/${clave}`,
+  condicionesArticulo:   (id: number | string) => `${API_BASE_URL}/articulos/${id}/condiciones`,
+  aceptarCondiciones:    (id: number | string) => `${API_BASE_URL}/articulos/${id}/aceptar`,
+  rechazarCondiciones:   (id: number | string) => `${API_BASE_URL}/articulos/${id}/rechazar`,
+  // Perfil
+  clienteDetalle:        (id: number | string) => `${API_BASE_URL}/clientes/${id}`,
+  paisDetalle:           (numero: number | string) => `${API_BASE_URL}/paises/${numero}`,
+  estadisticasCliente:   (id: number | string) => `${API_BASE_URL}/clientes/${id}/estadisticas`,
 };

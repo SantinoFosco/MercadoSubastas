@@ -35,7 +35,8 @@
           "resizeMode": "contain",
           "backgroundColor": "#FFD700"
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true,
