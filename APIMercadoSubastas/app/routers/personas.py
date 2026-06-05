@@ -12,7 +12,7 @@ router = APIRouter(tags=["Personas"])
 def ep_get_sectores(db: Session = Depends(get_db)):
     sectores = db.query(models.Sector).all()
     return [schemas.SectorResponse(
-        identificador=s.indentificador,
+        identificador=s.identificador,
         nombreSector=s.nombreSector,
         codigoSector=s.codigoSector,
     ) for s in sectores]
@@ -24,21 +24,21 @@ def ep_create_sector(request: schemas.SectorCreate, db: Session = Depends(get_db
     db.commit()
     db.refresh(nuevo)
     return schemas.SectorResponse(
-        identificador=nuevo.indentificador,
+        identificador=nuevo.identificador,
         nombreSector=nuevo.nombreSector,
         codigoSector=nuevo.codigoSector,
     )
 
 @router.get("/sectores/{sector_id}", response_model=schemas.SectorResponse)
 def ep_get_sector(sector_id: int, db: Session = Depends(get_db)):
-    s = db.query(models.Sector).filter(models.Sector.indentificador == sector_id).first()
+    s = db.query(models.Sector).filter(models.Sector.identificador == sector_id).first()
     if not s:
         raise HTTPException(status_code=404, detail="Sector no encontrado")
-    return schemas.SectorResponse(identificador=s.indentificador, nombreSector=s.nombreSector, codigoSector=s.codigoSector)
+    return schemas.SectorResponse(identificador=s.identificador, nombreSector=s.nombreSector, codigoSector=s.codigoSector)
 
 @router.delete("/sectores/{sector_id}")
 def ep_delete_sector(sector_id: int, db: Session = Depends(get_db)):
-    s = db.query(models.Sector).filter(models.Sector.indentificador == sector_id).first()
+    s = db.query(models.Sector).filter(models.Sector.identificador == sector_id).first()
     if not s:
         raise HTTPException(status_code=404, detail="Sector no encontrado")
     db.delete(s)
@@ -153,6 +153,27 @@ def ep_create_cliente(request: schemas.ClienteCreate, db: Session = Depends(get_
     db.commit()
     db.refresh(nuevo)
     return nuevo
+
+@router.get("/clientes/{cliente_id}/perfil", response_model=schemas.PerfilCompletoResponse)
+def ep_get_perfil(cliente_id: int, db: Session = Depends(get_db)):
+    cliente = db.query(models.Cliente).filter(models.Cliente.identificador == cliente_id).first()
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+    persona = db.query(models.Persona).filter(
+        models.Persona.identificador == cliente_id
+    ).first()
+    detalle = db.query(models.PersonaDetalle).filter(
+        models.PersonaDetalle.persona == cliente_id
+    ).first()
+    return schemas.PerfilCompletoResponse(
+        identificador=cliente_id,
+        nombre=persona.nombre if persona else "",
+        mail=detalle.mail if detalle else "",
+        direccion=persona.direccion if persona else "",
+        categoria=cliente.categoria,
+        admitido=cliente.admitido,
+        numeroPais=cliente.numeroPais,
+    )
 
 @router.get("/clientes/{cliente_id}", response_model=schemas.ClienteResponse)
 def ep_get_cliente(cliente_id: int, db: Session = Depends(get_db)):

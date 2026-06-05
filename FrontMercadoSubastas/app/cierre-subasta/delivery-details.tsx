@@ -13,7 +13,7 @@ type DeliveryMethod = 'domicilio' | 'retiro';
 type PrecioFinal = {
   precioFinal: number;
   comision: number;
-  seguro: number;
+  envio: number;
   total: number;
 };
 
@@ -26,20 +26,28 @@ export default function DeliveryDetailsScreen() {
 
   const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('domicilio');
   const [precio, setPrecio]   = useState<PrecioFinal | null>(null);
+  const [direccion, setDireccion] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [confirming, setConfirming] = useState(false);
 
-  const fetchPrecio = useCallback(async () => {
+  const fetchData = useCallback(async () => {
     if (!subastaId || !clienteId) return;
     try {
-      const res = await fetch(API_ENDPOINTS.precioTotal(subastaId, clienteId));
-      if (res.ok) setPrecio(await res.json());
+      const [precioRes, perfilRes] = await Promise.all([
+        fetch(API_ENDPOINTS.precioTotal(subastaId, clienteId)),
+        fetch(API_ENDPOINTS.perfilCompleto(clienteId)),
+      ]);
+      if (precioRes.ok) setPrecio(await precioRes.json());
+      if (perfilRes.ok) {
+        const perfil = await perfilRes.json();
+        setDireccion(perfil.direccion ?? '');
+      }
     } finally {
       setLoading(false);
     }
   }, [subastaId, clienteId]);
 
-  useEffect(() => { fetchPrecio(); }, [fetchPrecio]);
+  useEffect(() => { fetchData(); }, [fetchData]);
 
   const handleContinuar = async () => {
     if (!subastaId || !clienteId) return;
@@ -59,9 +67,9 @@ export default function DeliveryDetailsScreen() {
     }
   };
 
-  // Cuando el usuario elige retiro personal, el seguro queda en $0
-  const seguroVisible = deliveryMethod === 'domicilio' ? (precio?.seguro ?? 0) : 0;
-  const totalVisible  = deliveryMethod === 'domicilio'
+  // Envío: se cobra solo si elige domicilio (el back lo calcula tras confirmar_envio)
+  const envioVisible = deliveryMethod === 'domicilio' ? (precio?.envio ?? 0) : 0;
+  const totalVisible = deliveryMethod === 'domicilio'
     ? (precio?.total ?? 0)
     : ((precio?.precioFinal ?? 0) + (precio?.comision ?? 0));
 
@@ -133,7 +141,11 @@ export default function DeliveryDetailsScreen() {
             <View style={styles.deliveryTextContainer}>
               <Text style={styles.deliveryOptionTitle}>Envío a domicilio</Text>
               <Text style={styles.deliveryOptionAddress}>
+<<<<<<< HEAD
                 {SessionStore.get()?.direccion ?? 'Dirección no disponible'}
+=======
+                {direccion || 'Cargando dirección...'}
+>>>>>>> 6684904f7b6ab89ab873382485f9091cbbf5da3d
               </Text>
             </View>
             <View style={styles.radioOuter}>
@@ -187,10 +199,10 @@ export default function DeliveryDetailsScreen() {
               <Text style={styles.costLabel}>Comisión</Text>
               <Text style={styles.costValue}>{formatCurrency(precio?.comision ?? 0)}</Text>
             </View>
-            {seguroVisible > 0 && (
+            {envioVisible > 0 && (
               <View style={styles.costRow}>
-                <Text style={styles.costLabel}>Seguro de Envío</Text>
-                <Text style={styles.costValue}>{formatCurrency(seguroVisible)}</Text>
+                <Text style={styles.costLabel}>Costo de envío</Text>
+                <Text style={styles.costValue}>{formatCurrency(envioVisible)}</Text>
               </View>
             )}
 

@@ -18,7 +18,7 @@ type ProductoComprado = {
 type PrecioFinal = {
   precioFinal: number;
   comision: number;
-  seguro: number;
+  envio: number;
   total: number;
 };
 
@@ -128,10 +128,10 @@ export default function WinnerScreen() {
               <Text style={styles.breakdownLabel}>Comisión</Text>
               <Text style={styles.breakdownValue}>{formatCurrency(precio.comision)}</Text>
             </View>
-            {precio.seguro > 0 && (
+            {precio.envio > 0 && (
               <View style={styles.breakdownRow}>
-                <Text style={styles.breakdownLabel}>Seguro</Text>
-                <Text style={styles.breakdownValue}>{formatCurrency(precio.seguro)}</Text>
+                <Text style={styles.breakdownLabel}>Costo de envío</Text>
+                <Text style={styles.breakdownValue}>{formatCurrency(precio.envio)}</Text>
               </View>
             )}
             <View style={[styles.breakdownRow, styles.totalRow]}>

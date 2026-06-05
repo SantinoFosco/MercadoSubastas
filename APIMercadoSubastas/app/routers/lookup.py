@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from .. import models, schemas
 from ..database import get_db
 
-router = APIRouter(tags=["Información"])
+router = APIRouter(tags=["Referencia"])
 
 @router.post("/paises/", response_model=schemas.Pais)
 def ep_create_pais(pais: schemas.PaisCreate, db: Session = Depends(get_db)):
@@ -32,3 +32,13 @@ def ep_delete_pais(numero: int, db: Session = Depends(get_db)):
     db.delete(pais)
     db.commit()
     return pais
+
+
+@router.get("/config/{clave}", response_model=schemas.ConfiguracionResponse)
+def ep_get_configuracion(clave: str, db: Session = Depends(get_db)):
+    obj = db.query(models.ConfiguracionEmpresa).filter(
+        models.ConfiguracionEmpresa.clave == clave
+    ).first()
+    if not obj:
+        raise HTTPException(status_code=404, detail="Configuración no encontrada")
+    return obj

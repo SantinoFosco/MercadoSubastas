@@ -140,7 +140,7 @@ class SubastaDestacada(BaseModel):
     subastaId: int
     titulo: str
     fecha: datetime
-    imagenUrl: str
+    imagen: Optional[str] = None
     postoresRegistrados: int
     categoria: str
     enVivo: bool
@@ -218,7 +218,7 @@ class ProductoComprado(BaseModel):
 class PrecioFinal(BaseModel):
     precioFinal: float
     comision: float
-    seguro: float
+    envio: float
     total: float
 
 #------------------ Personas -------------------------------#
@@ -521,3 +521,46 @@ class MultaResponse(BaseModel):
     fecha_limite: datetime
     class Config:
         from_attributes = True
+
+#------------------ Perfil completo ------------------------#
+
+class PerfilCompletoResponse(BaseModel):
+    identificador: int
+    nombre: str
+    mail: str
+    direccion: str
+    categoria: str
+    admitido: str
+    numeroPais: Optional[int] = None
+
+#------------------ Estado de compras ----------------------#
+
+class RegistroCompraItem(BaseModel):
+    identificador: int
+    subastaId: int
+    productoId: int
+    titulo: str
+    importe: float
+    comision: float
+    envio: float
+    total: float
+    pagado: str
+    metodoEnvio: Optional[str] = None
+    fechaLimitePago: Optional[datetime] = None
+    moneda: str = "ARS"
+
+#------------------ Admin pagos ----------------------------#
+
+class AdminPagoPendienteResponse(BaseModel):
+    registroId: int
+    clienteId: int
+    nombreCliente: str
+    mailCliente: str
+    subastaId: int
+    importe: float
+    comision: float
+    envio: float
+    total: float
+    moneda: str
+    metodoPago: Optional[str] = None
+    fechaLimitePago: Optional[datetime] = None

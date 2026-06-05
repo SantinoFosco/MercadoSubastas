@@ -21,12 +21,21 @@ type MedioPago = {
 type PrecioFinal = {
   precioFinal: number;
   comision: number;
-  seguro: number;
+  envio: number;
   total: number;
 };
 
-const formatCurrency = (n: number) =>
-  '$' + n.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+type PagoRegistrado = {
+  mensaje: string;
+  fechaLimitePago: string;
+  total: number;
+  moneda: string;
+};
+
+const formatCurrency = (n: number, moneda = 'ARS') => {
+  const sym = moneda === 'USD' ? 'USD ' : '$';
+  return sym + n.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
 
 function iconForTipo(tipo: MedioPago['tipo']): React.ComponentProps<typeof MaterialCommunityIcons>['name'] {
   if (tipo === 'tarjeta') return 'credit-card-outline';
@@ -51,11 +60,12 @@ export default function ConfirmPaymentScreen() {
   const router = useRouter();
   const { subastaId, clienteId } = useLocalSearchParams<{ subastaId: string; clienteId: string }>();
 
-  const [medios, setMedios]         = useState<MedioPago[]>([]);
-  const [precio, setPrecio]         = useState<PrecioFinal | null>(null);
-  const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [loading, setLoading]       = useState(true);
-  const [paying, setPaying]         = useState(false);
+  const [medios, setMedios]             = useState<MedioPago[]>([]);
+  const [precio, setPrecio]             = useState<PrecioFinal | null>(null);
+  const [selectedId, setSelectedId]     = useState<number | null>(null);
+  const [loading, setLoading]           = useState(true);
+  const [paying, setPaying]             = useState(false);
+  const [pagoRegistrado, setPagoRegistrado] = useState<PagoRegistrado | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!subastaId || !clienteId) return;
@@ -66,9 +76,7 @@ export default function ConfirmPaymentScreen() {
       ]);
       if (resMedios.ok) {
         const data = await resMedios.json();
-        const verificados: MedioPago[] = (data.medios as MedioPago[]).filter(
-          (m) => m.estado === 'verificado'
-        );
+        const verificados: MedioPago[] = (data.medios as MedioPago[]).filter(m => m.estado === 'verificado');
         setMedios(verificados);
         if (verificados.length > 0) setSelectedId(verificados[0].id);
       }
@@ -89,14 +97,11 @@ export default function ConfirmPaymentScreen() {
         { method: 'POST' }
       );
       if (res.ok) {
-        Alert.alert(
-          '¡Compra confirmada!',
-          'Tu pago fue registrado correctamente. Nos pondremos en contacto para coordinar la entrega.',
-          [{ text: 'Volver al inicio', onPress: () => router.push('/exploracion') }]
-        );
+        const data: PagoRegistrado = await res.json();
+        setPagoRegistrado(data);
       } else {
         const err = await res.json().catch(() => ({}));
-        Alert.alert('Error al pagar', err.detail ?? 'No se pudo procesar el pago. Intentá de nuevo.');
+        Alert.alert('No se pudo registrar el pago', err.detail ?? 'Intentá de nuevo.');
       }
     } catch {
       Alert.alert('Error', 'Error de conexión. Verificá tu internet e intentá de nuevo.');
@@ -105,11 +110,65 @@ export default function ConfirmPaymentScreen() {
     }
   };
 
+  // ── Pantalla de éxito (pago pendiente) ────────────────────────────────────
+  if (pagoRegistrado) {
+    const deadline = new Date(pagoRegistrado.fechaLimitePago);
+    const deadlineStr = deadline.toLocaleString('es-AR', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    });
+    return (
+      <SafeAreaView style={styles.container}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <ScrollView contentContainerStyle={[styles.scrollContent, { alignItems: 'center', paddingTop: 60 }]}>
+          <View style={styles.successIconCircle}>
+            <MaterialCommunityIcons name="email-check-outline" size={48} color="#8A6D3B" />
+          </View>
+
+          <Text style={styles.successTitle}>¡Email enviado!</Text>
+          <Text style={styles.successSubtitle}>
+            Te enviamos los detalles de tu compra con un link de pago.
+          </Text>
+
+          <View style={styles.pendingCard}>
+            <Text style={styles.pendingLabel}>TOTAL A PAGAR</Text>
+            <Text style={styles.pendingTotal}>
+              {formatCurrency(pagoRegistrado.total, pagoRegistrado.moneda)}
+            </Text>
+            <View style={styles.pendingDivider} />
+            <View style={styles.pendingRow}>
+              <MaterialCommunityIcons name="clock-alert-outline" size={16} color="#D32F2F" />
+              <Text style={styles.pendingDeadline}>
+                Fecha límite: <Text style={{ fontWeight: '700' }}>{deadlineStr}</Text>
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.infoBox}>
+            <MaterialCommunityIcons name="information-outline" size={18} color="#8A6D3B" style={{ marginTop: 2 }} />
+            <Text style={styles.infoText}>
+              Una vez recibido el pago, un representante de Mercado Subastas lo confirmará y recibirás otro email.{'\n\n'}
+              Si no completás el pago antes de la fecha límite, se generará una multa del 10% y el caso podrá derivarse a instancias legales.
+            </Text>
+          </View>
+
+          <TouchableOpacity
+            style={styles.primaryButton}
+            onPress={() => router.push('/exploracion')}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.primaryButtonText}>Volver al inicio</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  // ── Pantalla principal ────────────────────────────────────────────────────
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
 
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} activeOpacity={0.7}>
           <MaterialCommunityIcons name="menu" size={26} color="#1A1A1A" />
@@ -119,21 +178,17 @@ export default function ConfirmPaymentScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Title Section */}
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <Text style={styles.title}>Confirmar Pago</Text>
         <Text style={styles.subtitle}>
-          Completa la transacción para asegurar tu lote.
+          Seleccioná tu medio de pago. Te enviaremos un email con el link para completar la transferencia.
         </Text>
 
         {loading ? (
           <ActivityIndicator size="large" color="#FFD700" style={{ marginVertical: 32 }} />
         ) : (
           <>
-            {/* Lot Summary */}
+            {/* Resumen */}
             <View style={styles.lotSummaryCard}>
               <Text style={styles.sectionLabel}>RESUMEN DE COMPRA</Text>
               <View style={styles.summaryRow}>
@@ -144,10 +199,10 @@ export default function ConfirmPaymentScreen() {
                 <Text style={styles.summaryRowLabel}>Comisión</Text>
                 <Text style={styles.summaryRowValue}>{formatCurrency(precio?.comision ?? 0)}</Text>
               </View>
-              {(precio?.seguro ?? 0) > 0 && (
+              {(precio?.envio ?? 0) > 0 && (
                 <View style={styles.summaryRow}>
-                  <Text style={styles.summaryRowLabel}>Seguro de Envío</Text>
-                  <Text style={styles.summaryRowValue}>{formatCurrency(precio!.seguro)}</Text>
+                  <Text style={styles.summaryRowLabel}>Costo de envío</Text>
+                  <Text style={styles.summaryRowValue}>{formatCurrency(precio!.envio)}</Text>
                 </View>
               )}
               <View style={styles.summaryDivider} />
@@ -155,9 +210,8 @@ export default function ConfirmPaymentScreen() {
               <Text style={styles.totalPrice}>{formatCurrency(precio?.total ?? 0)}</Text>
             </View>
 
-            {/* Payment Methods */}
-            <Text style={styles.paymentTitle}>Método de Pago Verificado</Text>
-
+            {/* Medios de pago */}
+            <Text style={styles.paymentTitle}>Medio de Pago Verificado</Text>
             {medios.length === 0 ? (
               <View style={styles.emptyCard}>
                 <MaterialCommunityIcons name="alert-circle-outline" size={32} color="#D32F2F" />
@@ -166,22 +220,15 @@ export default function ConfirmPaymentScreen() {
                 </Text>
               </View>
             ) : (
-              medios.map((medio) => (
+              medios.map(medio => (
                 <TouchableOpacity
                   key={medio.id}
-                  style={[
-                    styles.paymentOption,
-                    selectedId === medio.id && styles.paymentOptionSelected,
-                  ]}
+                  style={[styles.paymentOption, selectedId === medio.id && styles.paymentOptionSelected]}
                   onPress={() => setSelectedId(medio.id)}
                   activeOpacity={0.8}
                 >
                   <View style={styles.paymentIconContainer}>
-                    <MaterialCommunityIcons
-                      name={iconForTipo(medio.tipo)}
-                      size={22}
-                      color="#614F3A"
-                    />
+                    <MaterialCommunityIcons name={iconForTipo(medio.tipo)} size={22} color="#614F3A" />
                   </View>
                   <View style={styles.paymentTextContainer}>
                     <Text style={styles.paymentOptionTitle}>{labelForMedio(medio)}</Text>
@@ -194,251 +241,98 @@ export default function ConfirmPaymentScreen() {
               ))
             )}
 
-            {/* Security Message */}
-            <View style={styles.securityCard}>
-              <MaterialCommunityIcons name="shield-check-outline" size={18} color="#8A6D3B" />
-              <Text style={styles.securityText}>
-                <Text style={styles.securityBold}>Mensaje de seguridad: </Text>
-                Esta transacción está protegida por encriptación de grado bancario. Sus datos financieros nunca se comparten con el vendedor. Al hacer clic en finalizar, autoriza el cobro del total indicado.
+            <View style={styles.infoBox}>
+              <MaterialCommunityIcons name="information-outline" size={18} color="#8A6D3B" style={{ marginTop: 2 }} />
+              <Text style={styles.infoText}>
+                Al confirmar, recibirás un email con el detalle de tu compra y un link de pago. Tenés 72 horas para completar la transferencia.
               </Text>
             </View>
 
-            {/* Finalize Button */}
             <TouchableOpacity
-              style={[
-                styles.primaryButton,
-                (paying || selectedId == null) && styles.primaryButtonDisabled,
-              ]}
+              style={[styles.primaryButton, (paying || selectedId == null) && styles.primaryButtonDisabled]}
               onPress={handleFinalizar}
               activeOpacity={0.85}
               disabled={paying || selectedId == null}
             >
               <Text style={styles.primaryButtonText}>
-                {paying ? 'PROCESANDO...' : 'Finalizar Compra'}
+                {paying ? 'ENVIANDO...' : 'Confirmar y recibir link de pago'}
               </Text>
             </TouchableOpacity>
-
-            {/* Trust Icons */}
-            <View style={styles.trustIcons}>
-              <MaterialCommunityIcons name="shield-lock-outline" size={24} color="#999999" />
-              <MaterialCommunityIcons name="camera-outline" size={24} color="#999999" />
-              <MaterialCommunityIcons name="account-check-outline" size={24} color="#999999" />
-            </View>
           </>
         )}
       </ScrollView>
 
-      {/* Bottom Tab Bar */}
       <BottomTabBar activeTab="mis-pujas" />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FAFBFD',
-  },
+  container: { flex: 1, backgroundColor: '#FAFBFD' },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 20, paddingVertical: 12,
+    borderBottomWidth: 1, borderBottomColor: '#F0F0F0',
   },
-  scrollContent: {
-    paddingHorizontal: 24,
-    paddingVertical: 20,
-    paddingBottom: 30,
-  },
-
-  /* Title */
-  title: {
-    fontSize: 26,
-    fontWeight: '800',
-    color: '#1A1A1A',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  subtitle: {
-    fontSize: 14,
-    color: '#666666',
-    lineHeight: 20,
-    marginBottom: 24,
-    textAlign: 'center',
-  },
-
-  /* Lot Summary */
-  lotSummaryCard: {
-    backgroundColor: '#F5F6F8',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 24,
-  },
-  sectionLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#8A6D3B',
-    letterSpacing: 1.5,
-    marginBottom: 12,
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  summaryRowLabel: {
-    fontSize: 14,
-    color: '#555555',
-  },
-  summaryRowValue: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1A1A1A',
-  },
-  summaryDivider: {
-    height: 1,
-    backgroundColor: '#E0E0E0',
-    marginVertical: 12,
-  },
-  totalLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#8A6D3B',
-    letterSpacing: 1.5,
-    marginBottom: 4,
-  },
-  totalPrice: {
-    fontSize: 36,
-    fontWeight: '800',
-    color: '#1A1A1A',
-  },
-
-  /* Payment Methods */
-  paymentTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#1A1A1A',
-    marginBottom: 14,
-  },
+  scrollContent: { paddingHorizontal: 24, paddingVertical: 20, paddingBottom: 30 },
+  title: { fontSize: 26, fontWeight: '800', color: '#1A1A1A', marginBottom: 8, textAlign: 'center' },
+  subtitle: { fontSize: 14, color: '#666666', lineHeight: 20, marginBottom: 24, textAlign: 'center' },
+  lotSummaryCard: { backgroundColor: '#F5F6F8', borderRadius: 16, padding: 20, marginBottom: 24 },
+  sectionLabel: { fontSize: 10, fontWeight: '700', color: '#8A6D3B', letterSpacing: 1.5, marginBottom: 12 },
+  summaryRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+  summaryRowLabel: { fontSize: 14, color: '#555555' },
+  summaryRowValue: { fontSize: 14, fontWeight: '600', color: '#1A1A1A' },
+  summaryDivider: { height: 1, backgroundColor: '#E0E0E0', marginVertical: 12 },
+  totalLabel: { fontSize: 10, fontWeight: '700', color: '#8A6D3B', letterSpacing: 1.5, marginBottom: 4 },
+  totalPrice: { fontSize: 36, fontWeight: '800', color: '#1A1A1A' },
+  paymentTitle: { fontSize: 15, fontWeight: '700', color: '#1A1A1A', marginBottom: 14 },
   paymentOption: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: '#F0F0F0',
-    padding: 16,
-    marginBottom: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
+    backgroundColor: '#FFFFFF', borderRadius: 12, borderWidth: 1.5, borderColor: '#F0F0F0',
+    padding: 16, marginBottom: 10, flexDirection: 'row', alignItems: 'center',
   },
-  paymentOptionSelected: {
-    borderColor: '#8A6D3B',
-  },
+  paymentOptionSelected: { borderColor: '#8A6D3B' },
   paymentIconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: '#F5F6F8',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 14,
+    width: 44, height: 44, borderRadius: 12, backgroundColor: '#F5F6F8',
+    alignItems: 'center', justifyContent: 'center', marginRight: 14,
   },
-  paymentTextContainer: {
-    flex: 1,
-  },
-  paymentOptionTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#1A1A1A',
-    marginBottom: 2,
-  },
-  paymentOptionSub: {
-    fontSize: 12,
-    color: '#999999',
-  },
+  paymentTextContainer: { flex: 1 },
+  paymentOptionTitle: { fontSize: 14, fontWeight: '700', color: '#1A1A1A', marginBottom: 2 },
+  paymentOptionSub: { fontSize: 12, color: '#999999' },
   radioOuter: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 2,
-    borderColor: '#D0D0D0',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 8,
+    width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: '#D0D0D0',
+    alignItems: 'center', justifyContent: 'center', marginLeft: 8,
   },
-  radioOuterSelected: {
-    borderColor: '#FFD700',
+  radioOuterSelected: { borderColor: '#FFD700' },
+  radioInner: { width: 12, height: 12, borderRadius: 6, backgroundColor: '#FFD700' },
+  emptyCard: { backgroundColor: '#FFF5F5', borderRadius: 12, padding: 20, alignItems: 'center', gap: 10, marginBottom: 16 },
+  emptyText: { fontSize: 13, color: '#D32F2F', textAlign: 'center', lineHeight: 20 },
+  infoBox: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 10,
+    backgroundColor: '#FFF8E1', borderRadius: 12, padding: 14,
+    marginTop: 8, marginBottom: 24,
   },
-  radioInner: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#FFD700',
+  infoText: { fontSize: 12, color: '#614F3A', lineHeight: 18, flex: 1 },
+  primaryButton: {
+    backgroundColor: '#FFD700', borderRadius: 8, height: 56,
+    alignItems: 'center', justifyContent: 'center', marginBottom: 20,
   },
-
-  /* Empty state */
-  emptyCard: {
-    backgroundColor: '#FFF5F5',
-    borderRadius: 12,
-    padding: 20,
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: 16,
-  },
-  emptyText: {
-    fontSize: 13,
-    color: '#D32F2F',
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-
-  /* Security Card */
-  securityCard: {
-    backgroundColor: '#F5F6F8',
-    borderRadius: 12,
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-    marginTop: 10,
+  primaryButtonDisabled: { opacity: 0.6 },
+  primaryButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
+  // Success screen
+  successIconCircle: {
+    width: 96, height: 96, borderRadius: 48,
+    backgroundColor: '#FFF8E1', alignItems: 'center', justifyContent: 'center',
     marginBottom: 24,
   },
-  securityText: {
-    fontSize: 11,
-    color: '#666666',
-    lineHeight: 17,
-    flex: 1,
+  successTitle: { fontSize: 28, fontWeight: '800', color: '#1A1A1A', marginBottom: 10, textAlign: 'center' },
+  successSubtitle: { fontSize: 15, color: '#666', textAlign: 'center', lineHeight: 22, marginBottom: 32, paddingHorizontal: 16 },
+  pendingCard: {
+    width: '100%', backgroundColor: '#FFFFFF', borderRadius: 16,
+    borderWidth: 1, borderColor: '#F0F0F0', padding: 24, marginBottom: 20,
   },
-  securityBold: {
-    fontWeight: '700',
-    color: '#1A1A1A',
-  },
-
-  /* Button */
-  primaryButton: {
-    backgroundColor: '#FFD700',
-    borderRadius: 8,
-    height: 56,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-  },
-  primaryButtonDisabled: {
-    opacity: 0.6,
-  },
-  primaryButtonText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-
-  /* Trust Icons */
-  trustIcons: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 24,
-    marginBottom: 10,
-  },
+  pendingLabel: { fontSize: 11, fontWeight: '700', color: '#8A6D3B', letterSpacing: 1.5, marginBottom: 8 },
+  pendingTotal: { fontSize: 34, fontWeight: '800', color: '#1A1A1A', marginBottom: 4 },
+  pendingDivider: { height: 1, backgroundColor: '#F0F0F0', marginVertical: 16 },
+  pendingRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  pendingDeadline: { fontSize: 13, color: '#D32F2F', flex: 1 },
 });

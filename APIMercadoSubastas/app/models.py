@@ -50,7 +50,7 @@ class Empleado(Base):
 class Sector(Base):
     __tablename__ = "sectores"
 
-    indentificador = Column(Integer, primary_key=True, index=True)
+    identificador = Column(Integer, primary_key=True, index=True)
     nombreSector = Column(String, nullable=False)
     codigoSector = Column(String, nullable=True)
     responsableSector = Column(Integer, ForeignKey("empleados.identificador"), nullable=True)
@@ -240,13 +240,16 @@ class RegistroSubasta(Base):
     cliente   = Column(Integer, ForeignKey("clientes.identificador"),    nullable=False)
     importe   = Column(Numeric(precision=18, scale=2), nullable=False)
     comision  = Column(Numeric(precision=18, scale=2), nullable=False)
-    # Campos agregados al confirmar el pago al cierre de la subasta
-    medio_pago   = Column(Integer, ForeignKey("medios_pago.identificador"), nullable=True)
-    pagado        = Column(String, nullable=False, server_default="no")
-    metodo_envio  = Column(String, nullable=True)
+    medio_pago      = Column(Integer, ForeignKey("medios_pago.identificador"), nullable=True)
+    # 'no' = recién creado, 'pendiente' = medio registrado + email enviado,
+    # 'si' = pago confirmado por admin, 'vencido' = 72hs sin pago → derivado a justicia
+    pagado          = Column(String, nullable=False, server_default="no")
+    metodo_envio    = Column(String, nullable=True)
+    costo_envio     = Column(Numeric(precision=18, scale=2), nullable=True, server_default="0")
+    fecha_limite_pago = Column(DateTime, nullable=True)
 
     __table_args__ = (
-        CheckConstraint("pagado IN ('si', 'no')", name="chkPagado"),
+        CheckConstraint("pagado IN ('no', 'pendiente', 'si', 'vencido')", name="chkPagado"),
     )
 
 class MedioPago(Base):

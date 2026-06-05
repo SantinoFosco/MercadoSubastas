@@ -28,6 +28,8 @@ export default function PerfilScreen() {
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [multasPendientes, setMultasPendientes] = useState(0);
+  const [pagosPendientes, setPagosPendientes] = useState(0);
 
   useEffect(() => {
     async function fetchProfile() {
@@ -38,13 +40,17 @@ export default function PerfilScreen() {
       }
 
       try {
-        const clienteRes = await fetch(API_ENDPOINTS.clienteDetalle(session.identificador));
+        const [clienteRes, multasRes] = await Promise.all([
+          fetch(API_ENDPOINTS.perfilCompleto(session.identificador)),
+          fetch(API_ENDPOINTS.multasCliente(session.identificador)),
+        ]);
+
         if (!clienteRes.ok) throw new Error('Error al obtener perfil');
-        const clienteData = await clienteRes.json();
+        const perfilData = await clienteRes.json();
 
         let paisNombre = '-';
-        if (clienteData.numeroPais) {
-          const paisRes = await fetch(API_ENDPOINTS.paisDetalle(clienteData.numeroPais));
+        if (perfilData.numeroPais) {
+          const paisRes = await fetch(API_ENDPOINTS.paisDetalle(perfilData.numeroPais));
           if (paisRes.ok) {
             const paisData = await paisRes.json();
             paisNombre = paisData.nombre;
@@ -52,11 +58,16 @@ export default function PerfilScreen() {
         }
 
         setProfile({
-          nombre: session.nombre,
-          correo: session.mail,
+          nombre: perfilData.nombre,
+          correo: perfilData.mail,
           categoria: CATEGORIA_LABEL[session.categoria] ?? session.categoria,
           pais: paisNombre,
         });
+
+        if (multasRes.ok) {
+          const multas = await multasRes.json();
+          setMultasPendientes(multas.length);
+        }
       } catch {
         setError('No se pudo cargar el perfil.');
       } finally {
@@ -147,6 +158,27 @@ export default function PerfilScreen() {
           </View>
           <MaterialCommunityIcons name="chevron-right" size={24} color="#8A6D3B" />
         </Pressable>
+
+        {/* ─── Multas Button ──────────────────────────────────────── */}
+        {multasPendientes > 0 && (
+          <Pressable
+            style={[styles.statsButton, styles.multaButton]}
+            onPress={() => router.push('/perfil/multas')}
+          >
+            <View style={styles.statsButtonLeft}>
+              <View style={[styles.statsIconCircle, styles.multaIconCircle]}>
+                <MaterialCommunityIcons name="alert-circle-outline" size={22} color="#D32F2F" />
+              </View>
+              <View>
+                <Text style={[styles.statsButtonTitle, styles.multaTitle]}>
+                  Multas pendientes ({multasPendientes})
+                </Text>
+                <Text style={styles.statsButtonSubtitle}>Debés abonarlas antes de pujar</Text>
+              </View>
+            </View>
+            <MaterialCommunityIcons name="chevron-right" size={24} color="#D32F2F" />
+          </Pressable>
+        )}
 
         {/* ─── Cerrar Sesión Link ────────────────────────────────── */}
         <Pressable style={styles.logoutButton} onPress={handleLogout}>
@@ -294,6 +326,17 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#999',
     marginTop: 2,
+  },
+
+  multaButton: {
+    borderColor: '#FFCDD2',
+    borderWidth: 1.5,
+  },
+  multaIconCircle: {
+    backgroundColor: '#FFF5F5',
+  },
+  multaTitle: {
+    color: '#D32F2F',
   },
 
   logoutButton: {

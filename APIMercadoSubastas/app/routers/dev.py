@@ -1,14 +1,20 @@
+import os
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from .. import models
 from ..database import get_db
 from .subastas import _item_timers
 
+# Solo disponible cuando DEV_MODE=true (nunca en producción)
 router = APIRouter(prefix="/dev", tags=["Dev Utils"])
+DEV_MODE = os.getenv("DEV_MODE", "false").lower() == "true"
 
 
 @router.delete("/reset/usuarios")
 def reset_usuarios(db: Session = Depends(get_db)):
+    if not DEV_MODE:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="Endpoint solo disponible en modo desarrollo (DEV_MODE=true)")
     """Elimina todos los usuarios y sus datos asociados. Solo para dev/test."""
     db.query(models.HistorialPujos).delete(synchronize_session=False)
     db.query(models.Pujo).delete(synchronize_session=False)
@@ -30,6 +36,9 @@ def reset_usuarios(db: Session = Depends(get_db)):
 
 @router.delete("/reset/subasta/{subasta_id}")
 def reset_subasta(subasta_id: int, db: Session = Depends(get_db)):
+    if not DEV_MODE:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="Endpoint solo disponible en modo desarrollo (DEV_MODE=true)")
     """Resetea el estado de una subasta: cancela timers, borra pujas y asistentes. Solo para dev/test."""
     catalogo = db.query(models.Catalogo).filter(models.Catalogo.subasta == subasta_id).first()
     if catalogo:

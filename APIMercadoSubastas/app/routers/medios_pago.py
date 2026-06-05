@@ -102,9 +102,12 @@ def get_cuenta_bancaria(db: Session, medio_pago_id: int):
 
 
 def create_tarjeta(db: Session, request: schemas.TarjetaCreate):
+    from datetime import date
     marca_normalizada = request.marca.upper()
     if marca_normalizada not in {"VISA", "MASTERCARD", "AMEX"}:
         raise HTTPException(status_code=422, detail=f"Marca inválida '{request.marca}'. Permitidas: VISA, MASTERCARD, AMEX")
+    if request.vencimiento < date.today():
+        raise HTTPException(status_code=422, detail="La tarjeta está vencida")
     try:
         nuevo_medio = models.MedioPago(
             cliente=request.cliente, tipo="tarjeta", estado="pendiente",
@@ -147,10 +150,15 @@ def get_tarjeta(db: Session, medio_pago_id: int):
 
 
 def create_cheque_certificado(db: Session, request: schemas.ChequeCertificadoCreate):
+    if request.moneda != "ARS":
+        raise HTTPException(
+            status_code=422,
+            detail="Los cheques certificados solo pueden registrarse en pesos (ARS)"
+        )
     try:
         nuevo_medio = models.MedioPago(
             cliente=request.cliente, tipo="cheque_certificado", estado="pendiente",
-            moneda=request.moneda, es_internacional="no", descripcion=request.descripcion,
+            moneda="ARS", es_internacional="no", descripcion=request.descripcion,
         )
         db.add(nuevo_medio)
         db.flush()
