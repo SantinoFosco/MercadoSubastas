@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from . import models
 from .database import engine
-from .routers import auth, medios_pago, catalogo, subastas, compras, personas, lookup, dev, vender
+from .routers import auth, medios_pago, catalogo, subastas, compras, personas, lookup, dev, vender, admin
 
 
 @asynccontextmanager
@@ -14,7 +14,9 @@ async def lifespan(app: FastAPI):
             seed_paises, seed_empleados, seed_empresa,
             seed_subastas, seed_subastas_categorias,
             seed_usuario_prueba, seed_usuario_prueba_2,
-            seed_historial_prueba, seed_configuracion,
+            seed_usuario_cheque, seed_usuario_especial,
+            seed_subasta_usd, seed_historial_prueba,
+            seed_articulos_vendedor, seed_configuracion,
         )
         seed_paises()
         seed_empleados()
@@ -23,7 +25,11 @@ async def lifespan(app: FastAPI):
         seed_subastas_categorias()
         seed_usuario_prueba()
         seed_usuario_prueba_2()
+        seed_usuario_cheque()
+        seed_usuario_especial()
+        seed_subasta_usd()
         seed_historial_prueba()
+        seed_articulos_vendedor()
         seed_configuracion()
     except Exception as e:
         print(f"[seed] Error al cargar datos iniciales: {e}")
@@ -49,6 +55,7 @@ app.include_router(personas.router)
 app.include_router(lookup.router)
 app.include_router(dev.router)
 app.include_router(vender.router)
+app.include_router(admin.router)
 
 
 @app.get("/")

@@ -151,6 +151,11 @@ def seed_subastas():
         ]
         for item in items:
             db.add(item)
+        db.flush()
+
+        # AceptacionArticulo: para que los dueños puedan ver y aceptar las condiciones
+        for item in items:
+            db.add(models.AceptacionArticulo(producto=item.producto, estado="pendiente"))
 
         db.commit()
         print("✓ Subastas y catálogos creados")
@@ -310,6 +315,8 @@ def seed_subastas_categorias():
                         catalogo=catalogo.identificador, producto=producto.identificador,
                         precioBase=precio, comision=comision, subastado="no",
                     ))
+                    db.flush()
+                    db.add(models.AceptacionArticulo(producto=producto.identificador, estado="pendiente"))
                 db.flush()
 
         db.commit()
@@ -363,7 +370,7 @@ def seed_historial_prueba():
         for i, item in enumerate(items_s1):
             ganador = "si" if i == 0 else "no"
             importe = round(float(item.precioBase) * 1.2, 2)
-            pujo = models.Pujo(assitente=asistente_1.identificador, item=item.identificador, importe=importe, ganador=ganador)
+            pujo = models.Pujo(asistente=asistente_1.identificador, item=item.identificador, importe=importe, ganador=ganador)
             db.add(pujo)
             db.flush()
             db.add(models.HistorialPujos(
@@ -383,7 +390,7 @@ def seed_historial_prueba():
         for i, item in enumerate(items_s2):
             ganador = "si" if i == 1 else "no"
             importe = round(float(item.precioBase) * 1.15, 2)
-            pujo = models.Pujo(assitente=asistente_2.identificador, item=item.identificador, importe=importe, ganador=ganador)
+            pujo = models.Pujo(asistente=asistente_2.identificador, item=item.identificador, importe=importe, ganador=ganador)
             db.add(pujo)
             db.flush()
             db.add(models.HistorialPujos(
@@ -410,15 +417,19 @@ def seed_historial_prueba():
 
 
 def seed_configuracion():
-    """Carga la configuración inicial de la empresa (dirección de inspección)."""
+    """Carga la configuración inicial de la empresa."""
     db = SessionLocal()
     try:
-        if not db.get(models.ConfiguracionEmpresa, "direccion_inspeccion"):
-            db.add(models.ConfiguracionEmpresa(
-                clave="direccion_inspeccion",
-                valor="Av. Corrientes 1234, Piso 3, CABA — Lunes a Viernes 9-17hs",
-            ))
-            db.commit()
+        configs = {
+            "direccion_inspeccion": "Av. Corrientes 1234, Piso 3, CABA — Lunes a Viernes 9-17hs",
+            "direccion_deposito": "Av. Corrientes 1234, Depósito Subsuelo, CABA",
+            "costo_envio_domicilio": "5000",
+            "compania_seguro": "Seguros del Sur S.A.",
+        }
+        for clave, valor in configs.items():
+            if not db.get(models.ConfiguracionEmpresa, clave):
+                db.add(models.ConfiguracionEmpresa(clave=clave, valor=valor))
+        db.commit()
         print("✓ Configuración de empresa cargada")
     finally:
         db.close()
@@ -515,6 +526,229 @@ def seed_compras_prueba():
         db.close()
 
 
+def seed_usuario_cheque():
+    """Usuario con cheque certificado verificado para testear F5 (límite de saldo) y multas."""
+    db = SessionLocal()
+    try:
+        if db.query(models.PersonaDetalle).filter(models.PersonaDetalle.mail == "cheque@test.com").first():
+            print("✓ Usuario cheque@test.com ya existe, se omite")
+            return
+        persona = models.Persona(nombre="Comprador Cheque", documento="77777777", direccion="Av. Rivadavia 500, CABA", estado="activo")
+        db.add(persona)
+        db.flush()
+        db.add(models.PersonaDetalle(
+            persona=persona.identificador, pais=1, mail="cheque@test.com",
+            contrasenia=pwd_context.hash("Cheque1."), claveTemporal=False,
+        ))
+        db.add(models.Cliente(identificador=persona.identificador, numeroPais=1, admitido="si", categoria="comun", verificador=1))
+        db.flush()
+        # Cheque con saldo limitado: $50.000 (para testear rechazo por fondos insuficientes en items caros)
+        medio = models.MedioPago(
+            cliente=persona.identificador, tipo="cheque_certificado", estado="verificado",
+            moneda="ARS", es_internacional="no", descripcion="Cheque de prueba",
+        )
+        db.add(medio)
+        db.flush()
+        db.add(models.mpChequeCertificado(
+            medio_pago=medio.identificador, banco="Banco Provincia",
+            numero_cheque="00099999", monto=50000, monto_disponible=50000,
+        ))
+        db.commit()
+        print("✓ Usuario cheque@test.com creado (cheque certificado $50.000 verificado)")
+    except Exception as e:
+        db.rollback()
+        raise e
+    finally:
+        db.close()
+
+
+def seed_usuario_especial():
+    """Usuario con categoría 'especial' para testear acceso a subastas de mayor categoría."""
+    db = SessionLocal()
+    try:
+        if db.query(models.PersonaDetalle).filter(models.PersonaDetalle.mail == "especial@test.com").first():
+            print("✓ Usuario especial@test.com ya existe, se omite")
+            return
+        persona = models.Persona(nombre="Postor Especial", documento="66666666", direccion="Av. Santa Fe 3000, CABA", estado="activo")
+        db.add(persona)
+        db.flush()
+        db.add(models.PersonaDetalle(
+            persona=persona.identificador, pais=1, mail="especial@test.com",
+            contrasenia=pwd_context.hash("Especial1."), claveTemporal=False,
+        ))
+        db.add(models.Cliente(identificador=persona.identificador, numeroPais=1, admitido="si", categoria="especial", verificador=1))
+        db.flush()
+        medio = models.MedioPago(
+            cliente=persona.identificador, tipo="tarjeta", estado="verificado",
+            moneda="ARS", es_internacional="no", descripcion="Tarjeta especial",
+        )
+        db.add(medio)
+        db.flush()
+        db.add(models.mpTarjeta(
+            medio_pago=medio.identificador, titular="Postor Especial",
+            ultimos_4_digitos="5678", vencimiento=date(2028, 6, 30),
+            marca="MASTERCARD", tipo_tarjeta="credito",
+        ))
+        db.commit()
+        print("✓ Usuario especial@test.com creado (categoría: especial, tarjeta MASTERCARD verificada)")
+    except Exception as e:
+        db.rollback()
+        raise e
+    finally:
+        db.close()
+
+
+def seed_subasta_usd():
+    """Crea una subasta en dólares para testear el flujo de pago en USD."""
+    db = SessionLocal()
+    try:
+        if db.query(models.Subasta).filter(models.Subasta.moneda == "USD").first():
+            print("✓ Subasta USD ya existe, se omite")
+            return
+
+        p_sub = db.query(models.Persona).filter(models.Persona.documento == "00000001").first()
+        if not p_sub:
+            print("✗ Subastador no encontrado. Corré seed_subastas() primero.")
+            return
+        subastador_id = db.query(models.Subastador).filter(
+            models.Subastador.identificador == p_sub.identificador
+        ).first().identificador
+
+        p_due = db.query(models.Persona).filter(models.Persona.documento == "00000002").first()
+        duenio_id = p_due.identificador
+
+        hoy = date.today()
+        subasta = models.Subasta(
+            fecha=hoy + timedelta(days=20), hora=time(18, 0), estado="abierta",
+            subastador=subastador_id, ubicacion="Sala Dólar, Av. Alvear 1440, CABA",
+            capacidadAsistentes=40, tieneDeposito="si", seguridadPropia="si",
+            categoria="comun", moneda="USD",
+        )
+        db.add(subasta)
+        db.flush()
+
+        catalogo = models.Catalogo(descripcion="Subasta Internacional — USD", subasta=subasta.identificador, responsable=1)
+        db.add(catalogo)
+        db.flush()
+
+        producto = models.Producto(
+            descripcionCatalogo="Moneda de oro americana",
+            descripcionCompleta="Moneda de oro American Eagle 1 oz, acuñación 2020, sin circular.",
+            revisor=1, duenio=duenio_id, disponible="si",
+        )
+        db.add(producto)
+        db.flush()
+        db.add(models.ProductoPresentacion(
+            producto=producto.identificador, titulo="American Eagle — 1 oz oro",
+            categoria="Numismática", procedencia="Estados Unidos",
+            declaracionLegal="si", estado="publicado",
+        ))
+        item = models.ItemCatalogo(
+            catalogo=catalogo.identificador, producto=producto.identificador,
+            precioBase=1800, comision=5, subastado="no",
+        )
+        db.add(item)
+        db.flush()
+        db.add(models.AceptacionArticulo(producto=producto.identificador, estado="pendiente"))
+
+        db.commit()
+        print("✓ Subasta USD creada (American Eagle, precio base $1.800 USD)")
+    except Exception as e:
+        db.rollback()
+        raise e
+    finally:
+        db.close()
+
+
+def seed_articulos_vendedor():
+    """Crea artículos en distintos estados para testear la pantalla 'Mis Artículos' del vendedor."""
+    db = SessionLocal()
+    try:
+        usuario = db.query(models.PersonaDetalle).filter(
+            models.PersonaDetalle.mail == "prueba@test.com"
+        ).first()
+        if not usuario:
+            print("✗ Usuario prueba@test.com no encontrado.")
+            return
+
+        cliente_id = usuario.persona
+
+        # Verificar si ya existe como Duenio
+        if not db.query(models.Duenio).filter(models.Duenio.identificador == cliente_id).first():
+            db.add(models.Duenio(identificador=cliente_id, numeroPais=1, verificador=1))
+            db.flush()
+
+        # Verificar si ya tiene artículos de prueba
+        if db.query(models.InspeccionProducto).join(
+            models.Producto, models.InspeccionProducto.producto == models.Producto.identificador
+        ).filter(models.Producto.duenio == cliente_id).first():
+            print("✓ Artículos del vendedor ya existen, se omite")
+            return
+
+        articulos_seed = [
+            {
+                "descripcionCatalogo": "Cámara fotográfica vintage",
+                "descripcionCompleta": "Leica M3, 1954, excelente estado, con funda original.",
+                "titulo": "Leica M3 — 1954",
+                "categoria": "Fotografía",
+                "procedencia": "Alemania",
+                "estado_inspeccion": "pendiente",
+                "observaciones": None,
+                "costo_devolucion": None,
+            },
+            {
+                "descripcionCatalogo": "Violín italiano siglo XVIII",
+                "descripcionCompleta": "Violín atribuido a escuela italiana, circa 1760, arco incluido.",
+                "titulo": "Violín Italiano — Siglo XVIII",
+                "categoria": "Instrumentos Musicales",
+                "procedencia": "Italia",
+                "estado_inspeccion": "aprobado",
+                "observaciones": None,
+                "costo_devolucion": None,
+            },
+            {
+                "descripcionCatalogo": "Reloj de pared Art Nouveau",
+                "descripcionCompleta": "Reloj de pared de hierro forjado, estilo Art Nouveau, circa 1900.",
+                "titulo": "Reloj Art Nouveau — 1900",
+                "categoria": "Relojes",
+                "procedencia": "Francia",
+                "estado_inspeccion": "rechazado",
+                "observaciones": "El mecanismo presenta daños irreparables. No cumple estándares de venta.",
+                "costo_devolucion": 3500.00,
+            },
+        ]
+
+        for art in articulos_seed:
+            producto = models.Producto(
+                descripcionCatalogo=art["descripcionCatalogo"],
+                descripcionCompleta=art["descripcionCompleta"],
+                revisor=1, duenio=cliente_id, disponible="si",
+            )
+            db.add(producto)
+            db.flush()
+            db.add(models.ProductoPresentacion(
+                producto=producto.identificador, titulo=art["titulo"],
+                categoria=art["categoria"], procedencia=art["procedencia"],
+                declaracionLegal="si", estado="publicado",
+            ))
+            from datetime import datetime as _dt
+            db.add(models.InspeccionProducto(
+                producto=producto.identificador,
+                estado=art["estado_inspeccion"],
+                observaciones=art["observaciones"],
+                costo_devolucion=art["costo_devolucion"],
+                fecha_ultima_actualizacion=_dt.now(),
+            ))
+
+        db.commit()
+        print("✓ Artículos del vendedor creados (pendiente, aprobado, rechazado)")
+    except Exception as e:
+        db.rollback()
+        raise e
+    finally:
+        db.close()
+
+
 if __name__ == "__main__":
     target = sys.argv[1] if len(sys.argv) > 1 else "all"
 
@@ -528,6 +762,10 @@ if __name__ == "__main__":
         seed_subastas_categorias()
         seed_usuario_prueba()
         seed_usuario_prueba_2()
+        seed_usuario_cheque()
+        seed_usuario_especial()
+        seed_subasta_usd()
         seed_historial_prueba()
+        seed_articulos_vendedor()
         seed_configuracion()
         print("\nSeed completo. Para agregar compras de prueba: python -m scripts.seed compras")

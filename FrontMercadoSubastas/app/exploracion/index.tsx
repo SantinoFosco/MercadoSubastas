@@ -22,7 +22,7 @@ type SubastaDestacada = {
   subastaId: number;
   titulo: string;
   fecha: string;
-  imagenUrl: string;
+  imagen: string | null;
   postoresRegistrados: number;
   categoria: string;
   enVivo: boolean;

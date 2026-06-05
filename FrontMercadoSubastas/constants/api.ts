@@ -53,6 +53,14 @@ export const API_ENDPOINTS = {
   rechazarCondiciones:   (id: number | string) => `${API_BASE_URL}/articulos/${id}/rechazar`,
   // Perfil
   clienteDetalle:        (id: number | string) => `${API_BASE_URL}/clientes/${id}`,
+  perfilCompleto:        (id: number | string) => `${API_BASE_URL}/clientes/${id}/perfil`,
   paisDetalle:           (numero: number | string) => `${API_BASE_URL}/paises/${numero}`,
   estadisticasCliente:   (id: number | string) => `${API_BASE_URL}/clientes/${id}/estadisticas`,
+  multasCliente:         (id: number | string) => `${API_BASE_URL}/multas/${id}`,
+  // Admin
+  adminPagosPendientes:  `${API_BASE_URL}/admin/pagos/pendientes`,
+  adminConfirmarPago:    (id: number | string) => `${API_BASE_URL}/admin/pagos/${id}/confirmar`,
+  adminRechazarPago:     (id: number | string) => `${API_BASE_URL}/admin/pagos/${id}/rechazar`,
+  adminMultasPendientes: `${API_BASE_URL}/admin/multas/pendientes`,
+  adminConfirmarMulta:   (id: number | string) => `${API_BASE_URL}/admin/multas/${id}/confirmar-pago`,
 };

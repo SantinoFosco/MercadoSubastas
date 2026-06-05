@@ -4,10 +4,14 @@ from sqlalchemy.orm import Session
 from .. import models, schemas
 from ..database import get_db
 from ..utils import get_foto_b64
+from ..email_service import send_payment_notification, send_multa_notification
 
 router = APIRouter(tags=["Compras"])
 
-# ── CRUD ─────────────────────────────────────────────────────────────────────
+DEADLINE_PAGO_HORAS = 72
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _get_asistente(db: Session, subasta_id: int, usuario_id: int):
     return db.query(models.Asistente).filter(
@@ -16,14 +20,30 @@ def _get_asistente(db: Session, subasta_id: int, usuario_id: int):
     ).first()
 
 
-def _get_seguro_importe(db: Session, producto_id: int) -> float:
-    producto = db.query(models.Producto).filter(models.Producto.identificador == producto_id).first()
-    if producto and producto.seguro:
-        seguro = db.query(models.Seguro).filter(models.Seguro.nroPoliza == producto.seguro).first()
-        if seguro:
-            return float(seguro.importe)
-    return 0.0
+def _get_costo_envio_domicilio(db: Session) -> float:
+    cfg = db.query(models.ConfiguracionEmpresa).filter(
+        models.ConfiguracionEmpresa.clave == "costo_envio_domicilio"
+    ).first()
+    try:
+        return float(cfg.valor) if cfg else 0.0
+    except (ValueError, TypeError):
+        return 0.0
 
+
+def _get_mail_cliente(db: Session, cliente_id: int) -> tuple[str, str]:
+    """Retorna (mail, nombre) del cliente."""
+    detalle = db.query(models.PersonaDetalle).join(
+        models.Persona, models.PersonaDetalle.persona == models.Persona.identificador
+    ).filter(models.PersonaDetalle.persona == cliente_id).first()
+    persona = db.query(models.Persona).filter(
+        models.Persona.identificador == cliente_id
+    ).first()
+    mail = detalle.mail if detalle else ""
+    nombre = persona.nombre if persona else "Usuario"
+    return mail, nombre
+
+
+# ── CRUD ─────────────────────────────────────────────────────────────────────
 
 def get_compras(db: Session, subasta_id: int, usuario_id: int):
     asistente = _get_asistente(db, subasta_id, usuario_id)
@@ -35,10 +55,14 @@ def get_compras(db: Session, subasta_id: int, usuario_id: int):
     ).all()
     result = []
     for pujo in pujos:
-        item = db.query(models.ItemCatalogo).filter(models.ItemCatalogo.identificador == pujo.item).first()
+        item = db.query(models.ItemCatalogo).filter(
+            models.ItemCatalogo.identificador == pujo.item
+        ).first()
         if not item:
             continue
-        pp = db.query(models.ProductoPresentacion).filter(models.ProductoPresentacion.producto == item.producto).first()
+        pp = db.query(models.ProductoPresentacion).filter(
+            models.ProductoPresentacion.producto == item.producto
+        ).first()
         result.append(schemas.ProductoComprado(
             productoId=item.producto,
             titulo=pp.titulo if pp else "Sin título",
@@ -53,45 +77,53 @@ def get_precio_total(db: Session, subasta_id: int, usuario_id: int):
     asistente = _get_asistente(db, subasta_id, usuario_id)
     if not asistente:
         return None
-    paid_products = {r.producto for r in db.query(models.RegistroSubasta).filter(
+
+    registros = db.query(models.RegistroSubasta).filter(
         models.RegistroSubasta.subasta == subasta_id,
         models.RegistroSubasta.cliente == usuario_id,
-        models.RegistroSubasta.pagado == "si",
-    ).all()}
-    pujos = db.query(models.Pujo).filter(
-        models.Pujo.asistente == asistente.identificador,
-        models.Pujo.ganador == "si",
+        models.RegistroSubasta.pagado.in_(["no", "pendiente"]),
     ).all()
-    total_precio = total_comision = total_seguro = 0.0
-    for pujo in pujos:
-        item = db.query(models.ItemCatalogo).filter(models.ItemCatalogo.identificador == pujo.item).first()
-        if not item or item.producto in paid_products:
-            continue
-        total_precio += float(pujo.importe)
-        total_comision += float(pujo.importe) * float(item.comision) / 100
-        total_seguro += _get_seguro_importe(db, item.producto)
+
+    if not registros:
+        # Si ya están pagados, mostrar el total final igual
+        registros = db.query(models.RegistroSubasta).filter(
+            models.RegistroSubasta.subasta == subasta_id,
+            models.RegistroSubasta.cliente == usuario_id,
+        ).all()
+
+    total_precio = total_comision = 0.0
+    costo_envio = float(registros[0].costo_envio) if registros and registros[0].costo_envio else 0.0
+
+    for r in registros:
+        total_precio += float(r.importe)
+        total_comision += float(r.comision)
+
     return schemas.PrecioFinal(
         precioFinal=total_precio,
-        comision=total_comision,
-        seguro=total_seguro,
-        total=round(total_precio + total_comision + total_seguro, 2),
+        comision=round(total_comision, 2),
+        envio=costo_envio,
+        total=round(total_precio + total_comision + costo_envio, 2),
     )
 
 
 def confirmar_envio(db: Session, subasta_id: int, usuario_id: int, metodo_envio: str):
     if not _get_asistente(db, subasta_id, usuario_id):
         return None
+
+    costo = _get_costo_envio_domicilio(db) if metodo_envio == "domicilio" else 0.0
+
     registros = db.query(models.RegistroSubasta).filter(
         models.RegistroSubasta.subasta == subasta_id,
         models.RegistroSubasta.cliente == usuario_id,
     ).all()
     for r in registros:
         r.metodo_envio = metodo_envio
+        r.costo_envio = costo
     db.commit()
-    return f"Envío confirmado: {metodo_envio}"
+    return f"Entrega confirmada: {metodo_envio}"
 
 
-def confirmar_pago(db: Session, subasta_id: int, usuario_id: int, metodo_pago_id: int):
+async def confirmar_pago(db: Session, subasta_id: int, usuario_id: int, metodo_pago_id: int):
     if not _get_asistente(db, subasta_id, usuario_id):
         return None, "asistente"
 
@@ -105,8 +137,11 @@ def confirmar_pago(db: Session, subasta_id: int, usuario_id: int, metodo_pago_id
         return None, "medio_no_verificado"
 
     # Validar moneda para subastas en USD
-    subasta_obj = db.query(models.Subasta).filter(models.Subasta.identificador == subasta_id).first()
-    if subasta_obj and subasta_obj.moneda == "USD":
+    subasta_obj = db.query(models.Subasta).filter(
+        models.Subasta.identificador == subasta_id
+    ).first()
+    moneda = subasta_obj.moneda if subasta_obj else "ARS"
+    if moneda == "USD":
         if medio.moneda != "USD":
             return None, "moneda_incompatible"
         if medio.tipo == "tarjeta" and medio.es_internacional != "si":
@@ -114,48 +149,101 @@ def confirmar_pago(db: Session, subasta_id: int, usuario_id: int, metodo_pago_id
         if medio.tipo == "cheque_certificado":
             return None, "cheque_no_valido_usd"
 
-    # Buscar compras pendientes de pago de este usuario en esta subasta
+    # Compras pendientes de pago
     registros = db.query(models.RegistroSubasta).filter(
         models.RegistroSubasta.subasta == subasta_id,
         models.RegistroSubasta.cliente == usuario_id,
-        models.RegistroSubasta.pagado == "no",
+        models.RegistroSubasta.pagado.in_(["no", "pendiente"]),
     ).all()
     if not registros:
         return None, "sin_compras"
 
-    # Si paga con cheque certificado: validar saldo y descontarlo
+    # Calcular total real (importe + comisión + envío)
+    costo_envio = float(registros[0].costo_envio) if registros[0].costo_envio else 0.0
+    total = round(
+        sum(float(r.importe) + float(r.comision) for r in registros) + costo_envio, 2
+    )
+
+    # Para cheques: validar saldo ANTES de proceder
     if medio.tipo == "cheque_certificado":
         cheque = db.query(models.mpChequeCertificado).filter(
             models.mpChequeCertificado.medio_pago == metodo_pago_id
         ).first()
-        total = round(sum(
-            float(r.importe) + float(r.comision) + _get_seguro_importe(db, r.producto)
-            for r in registros
-        ), 2)
         if not cheque or float(cheque.monto_disponible) < total:
+            # Fondos insuficientes → multa inmediata
+            monto_multa = round(sum(float(r.importe) for r in registros) * 0.10, 2)
             multa_existente = db.query(models.Multa).filter(
                 models.Multa.cliente == usuario_id,
                 models.Multa.subasta == subasta_id,
                 models.Multa.pagado == "no",
             ).first()
+            deadline = datetime.now() + timedelta(hours=DEADLINE_PAGO_HORAS)
             if not multa_existente:
-                monto_multa = round(sum(float(r.importe) for r in registros) * 0.10, 2)
                 db.add(models.Multa(
-                    cliente=usuario_id, subasta=subasta_id,
-                    monto=monto_multa, pagado="no",
-                    fecha_limite=datetime.now() + timedelta(hours=72),
+                    cliente=usuario_id,
+                    subasta=subasta_id,
+                    monto=monto_multa,
+                    pagado="no",
+                    fecha_limite=deadline,
                 ))
                 db.commit()
+            # Notificar por email
+            mail, nombre = _get_mail_cliente(db, usuario_id)
+            importe_original = sum(float(r.importe) for r in registros)
+            import asyncio
+            asyncio.create_task(send_multa_notification(
+                to_email=mail,
+                nombre=nombre,
+                monto_multa=monto_multa,
+                importe_original=importe_original,
+                moneda=moneda,
+                deadline=deadline,
+            ))
             return None, "fondos_insuficientes"
+        # Saldo OK: descontar del cheque
         cheque.monto_disponible = round(float(cheque.monto_disponible) - total, 2)
 
-    # Registrar el medio de pago y marcar cada ítem como pagado
-    for registro in registros:
-        registro.medio_pago = metodo_pago_id
-        registro.pagado = "si"
-
+    # Registrar medio de pago, marcar como PENDIENTE y fijar deadline de 72hs
+    deadline = datetime.now() + timedelta(hours=DEADLINE_PAGO_HORAS)
+    for r in registros:
+        r.medio_pago = metodo_pago_id
+        r.pagado = "pendiente"
+        r.fecha_limite_pago = deadline
     db.commit()
-    return "Pago confirmado correctamente", None
+
+    # Construir detalle para el email
+    items_email = []
+    for r in registros:
+        pp = db.query(models.ProductoPresentacion).filter(
+            models.ProductoPresentacion.producto == r.producto
+        ).first()
+        items_email.append({
+            "titulo": pp.titulo if pp else f"Artículo #{r.producto}",
+            "importe": float(r.importe),
+            "comision": float(r.comision),
+        })
+
+    metodo_envio = registros[0].metodo_envio or "retiro"
+    mail, nombre = _get_mail_cliente(db, usuario_id)
+
+    import asyncio
+    asyncio.create_task(send_payment_notification(
+        to_email=mail,
+        nombre=nombre,
+        items=items_email,
+        costo_envio=costo_envio,
+        total=total,
+        moneda=moneda,
+        metodo_envio=metodo_envio,
+        deadline=deadline,
+    ))
+
+    return {
+        "mensaje": "Email enviado con el detalle de tu compra. El pago queda pendiente de confirmación.",
+        "fechaLimitePago": deadline.isoformat(),
+        "total": total,
+        "moneda": moneda,
+    }, None
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -167,6 +255,7 @@ def ep_get_compras(subasta_id: int, usuario_id: int, db: Session = Depends(get_d
         raise HTTPException(status_code=404, detail="Asistente no encontrado en esta subasta")
     return result
 
+
 @router.get("/subasta/{subasta_id}/{usuario_id}/compras/precio", response_model=schemas.PrecioFinal)
 def ep_get_precio_total(subasta_id: int, usuario_id: int, db: Session = Depends(get_db)):
     result = get_precio_total(db, subasta_id, usuario_id)
@@ -174,16 +263,26 @@ def ep_get_precio_total(subasta_id: int, usuario_id: int, db: Session = Depends(
         raise HTTPException(status_code=404, detail="Asistente no encontrado en esta subasta")
     return result
 
+
 @router.post("/subasta/{subasta_id}/{usuario_id}/compras/envio")
-def ep_confirmar_envio(subasta_id: int, usuario_id: int, metodoEnvio: str = Query(...), db: Session = Depends(get_db)):
+def ep_confirmar_envio(
+    subasta_id: int, usuario_id: int,
+    metodoEnvio: str = Query(..., pattern="^(domicilio|retiro)$"),
+    db: Session = Depends(get_db),
+):
     result = confirmar_envio(db, subasta_id, usuario_id, metodoEnvio)
     if result is None:
         raise HTTPException(status_code=404, detail="Asistente no encontrado en esta subasta")
     return {"mensaje": result}
 
+
 @router.post("/subasta/{subasta_id}/{usuario_id}/compras/pagar")
-def ep_confirmar_pago(subasta_id: int, usuario_id: int, metodoPagoId: int = Query(...), db: Session = Depends(get_db)):
-    result, error = confirmar_pago(db, subasta_id, usuario_id, metodoPagoId)
+async def ep_confirmar_pago(
+    subasta_id: int, usuario_id: int,
+    metodoPagoId: int = Query(...),
+    db: Session = Depends(get_db),
+):
+    result, error = await confirmar_pago(db, subasta_id, usuario_id, metodoPagoId)
     if error == "asistente":
         raise HTTPException(status_code=404, detail="Asistente no encontrado en esta subasta")
     if error == "medio_pago":
@@ -193,14 +292,17 @@ def ep_confirmar_pago(subasta_id: int, usuario_id: int, metodoPagoId: int = Quer
     if error == "sin_compras":
         raise HTTPException(status_code=409, detail="No hay compras pendientes de pago en esta subasta")
     if error == "fondos_insuficientes":
-        raise HTTPException(status_code=422, detail="El saldo disponible en el cheque certificado no alcanza para cubrir el total. Se registró una multa del 10%.")
+        raise HTTPException(
+            status_code=422,
+            detail="Tu cheque no tiene saldo suficiente. Se generó una multa del 10% y se te notificó por email.",
+        )
     if error == "moneda_incompatible":
         raise HTTPException(status_code=422, detail="La subasta es en USD. El medio de pago debe ser en dólares.")
     if error == "tarjeta_no_internacional":
         raise HTTPException(status_code=422, detail="Para subastas en USD se requiere una tarjeta internacional.")
     if error == "cheque_no_valido_usd":
-        raise HTTPException(status_code=422, detail="Los cheques certificados no pueden usarse para pagar subastas en USD.")
-    return {"mensaje": result}
+        raise HTTPException(status_code=422, detail="Los cheques certificados no pueden usarse en subastas en USD.")
+    return result
 
 
 @router.get("/multas/{cliente_id}", response_model=list[schemas.MultaResponse])

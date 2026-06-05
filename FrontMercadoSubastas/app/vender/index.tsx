@@ -48,8 +48,10 @@ export default function SubastarArticuloScreen() {
   const [error, setError] = useState('');
   const [uploadedFotos, setUploadedFotos] = useState<Record<number, string>>({});
   const [productoId, setProductoId] = useState<number | null>(null);
+  const [submitted, setSubmitted] = useState(false);
 
   const canSubmit = articleName.trim() && description.trim() && isChecked && !isLoading;
+  const fotosCount = Object.keys(uploadedFotos).length;
 
   const handleSlotPress = async (slotIndex: number, currentProductoId: number | null) => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -101,7 +103,7 @@ export default function SubastarArticuloScreen() {
       }
       const data = await res.json();
       setProductoId(data.productoId);
-      router.push('/vender/mis-articulos');
+      setSubmitted(true);
     } catch {
       setError('No se pudo conectar con el servidor.');
     } finally {
@@ -196,28 +198,48 @@ export default function SubastarArticuloScreen() {
 
         <SectionHeader title="Galería de Imágenes" />
 
+        {submitted && (
+          <View style={styles.successBanner}>
+            <MaterialCommunityIcons name="check-circle-outline" size={20} color="#2E7D32" />
+            <Text style={styles.successBannerText}>
+              Artículo creado. Ahora subí las fotos ({fotosCount}/6).
+            </Text>
+          </View>
+        )}
+
         <View style={styles.imageGrid}>
           {IMAGE_SLOTS.map((slot, index) => {
             const uploaded = !!uploadedFotos[index];
+            const disabled = !submitted;
             return (
-              <Pressable key={slot.label} style={styles.imageSlot} onPress={() => handleSlotPress(index, productoId)}>
+              <Pressable
+                key={slot.label}
+                style={[styles.imageSlot, disabled && styles.imageSlotDisabled]}
+                onPress={() => !disabled && handleSlotPress(index, productoId)}
+              >
                 <View style={styles.imageSlotContent}>
-                  <MaterialCommunityIcons
-                    name={uploaded ? 'check-circle' : slot.icon as any}
-                    size={40}
-                    color={uploaded ? '#4CAF50' : '#D0D0D0'}
-                  />
-                  <Text style={styles.imageSlotLabel}>{slot.label}</Text>
+                  {uploaded ? (
+                    <Image source={{ uri: uploadedFotos[index] }} style={styles.imagePreview} />
+                  ) : (
+                    <MaterialCommunityIcons
+                      name={slot.icon as any}
+                      size={40}
+                      color={disabled ? '#E0E0E0' : '#D0D0D0'}
+                    />
+                  )}
+                  <Text style={[styles.imageSlotLabel, disabled && { color: '#C0C0C0' }]}>
+                    {slot.label}
+                  </Text>
                 </View>
-                {index === 0 && !uploaded && (
-                  <View style={styles.enArchivoBadge}>
-                    <Text style={styles.enArchivoBadgeText}>EN ARCHIVO</Text>
-                  </View>
-                )}
               </Pressable>
             );
           })}
         </View>
+        {!submitted && (
+          <Text style={styles.photoHint}>
+            Las fotos se podrán subir una vez que envíes el artículo.
+          </Text>
+        )}
 
         <View style={styles.legalRow}>
           <Pressable
@@ -234,16 +256,28 @@ export default function SubastarArticuloScreen() {
 
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-        <Pressable
-          style={[styles.submitButton, !canSubmit && styles.submitButtonDisabled]}
-          onPress={handleSubmit}
-          disabled={!canSubmit}
-        >
-          {isLoading
-            ? <ActivityIndicator color="#FFF" />
-            : <Text style={styles.submitButtonText}>ENVIAR ARTÍCULO</Text>
-          }
-        </Pressable>
+        {!submitted ? (
+          <Pressable
+            style={[styles.submitButton, !canSubmit && styles.submitButtonDisabled]}
+            onPress={handleSubmit}
+            disabled={!canSubmit}
+          >
+            {isLoading
+              ? <ActivityIndicator color="#FFF" />
+              : <Text style={styles.submitButtonText}>ENVIAR ARTÍCULO</Text>
+            }
+          </Pressable>
+        ) : (
+          <Pressable
+            style={[styles.submitButton, fotosCount === 0 && styles.submitButtonDisabled]}
+            onPress={() => router.push('/vender/mis-articulos')}
+            disabled={fotosCount === 0}
+          >
+            <Text style={styles.submitButtonText}>
+              {fotosCount === 0 ? 'SUBÍ AL MENOS 1 FOTO' : `CONTINUAR (${fotosCount} foto${fotosCount > 1 ? 's' : ''})`}
+            </Text>
+          </Pressable>
+        )}
 
         <View style={{ height: 8 }} />
       </ScrollView>
@@ -287,4 +321,12 @@ const styles = StyleSheet.create({
   submitButton: { backgroundColor: '#FFD700', height: 56, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   submitButtonDisabled: { backgroundColor: '#CCCCCC' },
   submitButtonText: { color: 'white', fontWeight: '700', fontSize: 16, letterSpacing: 0.5 },
+  imageSlotDisabled: { opacity: 0.5 },
+  imagePreview: { width: '100%', height: '100%', borderRadius: 14, position: 'absolute' },
+  successBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: '#E8F5E9', borderRadius: 10, padding: 12, marginBottom: 16,
+  },
+  successBannerText: { fontSize: 13, color: '#2E7D32', fontWeight: '600', flex: 1 },
+  photoHint: { fontSize: 12, color: '#999', textAlign: 'center', marginBottom: 16, fontStyle: 'italic' },
 });

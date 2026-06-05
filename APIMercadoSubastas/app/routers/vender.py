@@ -72,12 +72,6 @@ def get_condiciones_articulo(db: Session, producto_id: int):
         models.Subasta.identificador == catalogo.subasta
     ).first() if catalogo and catalogo.subasta else None
 
-    if not aceptacion:
-        aceptacion = models.AceptacionArticulo(producto=producto_id, estado="pendiente")
-        db.add(aceptacion)
-        db.commit()
-        db.refresh(aceptacion)
-
     return schemas.ArticuloCondicionesResponse(
         productoId=producto_id,
         titulo=titulo,
@@ -189,16 +183,6 @@ def get_estadisticas_cliente(db: Session, cliente_id: int):
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
-
-@router.get("/config/{clave}", response_model=schemas.ConfiguracionResponse)
-def ep_get_configuracion(clave: str, db: Session = Depends(get_db)):
-    obj = db.query(models.ConfiguracionEmpresa).filter(
-        models.ConfiguracionEmpresa.clave == clave
-    ).first()
-    if not obj:
-        raise HTTPException(status_code=404, detail="Configuración no encontrada")
-    return obj
-
 
 @router.post("/articulos/", response_model=schemas.ArticuloSubmitResponse)
 def ep_submit_articulo(request: schemas.ArticuloSubmitRequest, db: Session = Depends(get_db)):

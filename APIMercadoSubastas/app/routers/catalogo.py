@@ -59,15 +59,11 @@ def get_home(db: Session, categoria: str) -> schemas.HomeResponse:
         ))
 
     primer_prod = _primer_producto_id(dest.identificador)
-    imagen_url = (
-        f"/productos/{primer_prod}/imagen-principal"
-        if primer_prod else f"/subastas/{dest.identificador}/imagen-principal"
-    )
     destacada = schemas.SubastaDestacada(
         subastaId=dest.identificador,
         titulo=_titulo(dest.identificador),
         fecha=datetime.combine(dest.fecha, dest.hora),
-        imagenUrl=imagen_url,
+        imagen=get_foto_b64(db, primer_prod) if primer_prod else None,
         postoresRegistrados=postores,
         categoria=dest.categoria,
         enVivo=_en_vivo(dest),
@@ -244,6 +240,16 @@ def ep_create_item_catalogo(request: schemas.ItemCatalogoCreate, db: Session = D
         precioBase=request.precioBase, comision=request.comision, subastado="no",
     )
     db.add(nuevo)
+    db.flush()
+
+    # Al asignar un artículo a catálogo, se crea el registro de aceptación pendiente
+    # para que el dueño pueda ver las condiciones y aceptar/rechazar
+    existe = db.query(models.AceptacionArticulo).filter(
+        models.AceptacionArticulo.producto == request.producto
+    ).first()
+    if not existe:
+        db.add(models.AceptacionArticulo(producto=request.producto, estado="pendiente"))
+
     db.commit()
     db.refresh(nuevo)
     return nuevo
