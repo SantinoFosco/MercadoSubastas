@@ -6,6 +6,7 @@ export type UserSession = {
   identificador: number;
   nombre: string;
   mail: string;
+  direccion: string;
   categoria: Categoria;
   estado: string;
   claveTemporal: boolean;

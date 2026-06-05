@@ -1,7 +1,7 @@
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+﻿import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Appbar, Text } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import BottomTabBar from '@/components/BottomTabBar';
@@ -112,7 +112,7 @@ export default function MisArticulosScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <Appbar.Header style={styles.appbar}>
         <Appbar.BackAction onPress={() => router.back()} color="#614F3A" />
         <Image source={require('../../assets/images/hammer-icon.png')} style={styles.logoBadge} resizeMode="contain" />
@@ -192,6 +192,15 @@ export default function MisArticulosScreen() {
         )}
       </ScrollView>
 
+      {/* ── FAB: Nuevo artículo ─────────────────────────────── */}
+      <TouchableOpacity
+        style={styles.fab}
+        activeOpacity={0.85}
+        onPress={() => router.push('/vender')}
+      >
+        <MaterialCommunityIcons name="plus" size={30} color="#FFFFFF" />
+      </TouchableOpacity>
+
       <BottomTabBar activeTab="vender" onTabPress={(tab) => { if (tab === 'explorar') router.push('/exploracion'); if (tab === 'perfil') router.push('/perfil'); }} />
     </SafeAreaView>
   );
@@ -224,4 +233,20 @@ const styles = StyleSheet.create({
   statusBadgeText: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
   emptyState: { alignItems: 'center', justifyContent: 'center', paddingVertical: 48, gap: 12 },
   emptyStateText: { fontSize: 14, color: '#999' },
+  fab: {
+    position: 'absolute',
+    bottom: 90,
+    right: 24,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#FFD700',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#FFD700',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.45,
+    shadowRadius: 10,
+    elevation: 8,
+  },
 });

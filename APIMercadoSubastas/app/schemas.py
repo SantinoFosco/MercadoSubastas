@@ -48,6 +48,7 @@ class Usuario(BaseModel):
     identificador: int
     nombre: str
     mail: str
+    direccion: str
     categoria: str
     estado: str
     claveTemporal: bool

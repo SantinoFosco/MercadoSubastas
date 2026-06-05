@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   ScrollView,
@@ -137,6 +137,16 @@ export default function SubastaVivoScreen() {
     color: '#FFD700',
   }));
 
+  // ── Ref para auto-scroll de la lista de pujas ───────────────────────────────
+  const bidsScrollRef = useRef<ScrollView>(null);
+
+  // Cada vez que llega una nueva puja, hacer scroll al inicio (más reciente)
+  useEffect(() => {
+    if (bids.length > 0) {
+      bidsScrollRef.current?.scrollTo({ y: 0, animated: true });
+    }
+  }, [bids.length]);
+
   // ── Handlers ─────────────────────────────────────────────────────────────────
 
   const handleQuickBidSelect = (amount: number) => {
@@ -193,7 +203,7 @@ export default function SubastaVivoScreen() {
   // ── Estado: subasta finalizada (solo para quienes no ganaron nada) ──────────
   if (auctionEnded && !hasWon) {
     return (
-      <SafeAreaView style={styles.safeArea} edges={['bottom']}>
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
         <View style={styles.endedContainer}>
           <MaterialCommunityIcons name="gavel" size={64} color="#8A6D3B" />
           <Text style={styles.endedTitle}>¡Subasta finalizada!</Text>
@@ -212,16 +222,12 @@ export default function SubastaVivoScreen() {
   // ── Render ───────────────────────────────────────────────────────────────────
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['bottom']}>
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-      >
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
+
+      {/* ══ ZONA 1: Hero + Stats (altura fija, no scrollea) ══════════════════ */}
+      <View>
         {/* ── 1. Hero Image with Overlay ─────────────────────────────────── */}
         <View style={styles.heroContainer}>
-          {/* Back button */}
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => router.back()}
@@ -230,26 +236,20 @@ export default function SubastaVivoScreen() {
             <MaterialCommunityIcons name="arrow-left" size={24} color="#FFFFFF" />
           </TouchableOpacity>
 
-          {/* EN VIVO badge */}
           <View style={styles.liveBadge}>
             <View style={[styles.liveDot, !isConnected && styles.liveDotOff]} />
             <Text style={styles.liveBadgeText}>{isConnected ? 'EN VIVO' : 'CONECTANDO...'}</Text>
           </View>
 
-          {/* Center placeholder icon */}
           <View style={styles.heroIconContainer}>
             <MaterialCommunityIcons name="watch" size={80} color="#555555" />
           </View>
 
-          {/* Bottom overlay */}
           <View style={styles.heroOverlay}>
             <Text style={styles.heroLotLabel}>LOTE #{auctionState?.itemCatalogoId ?? '...'}</Text>
             <Text style={styles.heroTitle}>{titulo}</Text>
           </View>
 
-          {/* Overlay ¡VENDIDO! — aparece cuando se cierra un ítem.
-              Si el ganador es el usuario actual, se personaliza el mensaje
-              y queda en la sala para seguir pujando por los próximos lotes. */}
           {soldInfo && (
             <View style={[
               styles.soldOverlay,
@@ -274,7 +274,7 @@ export default function SubastaVivoScreen() {
           )}
         </View>
 
-        {/* ── 2. Stats Row (3 cards) ─────────────────────────────────────── */}
+        {/* ── 2. Stats Grid ──────────────────────────────────────────────── */}
         <View style={styles.statsGrid}>
           <View style={styles.statsRow}>
             <View style={styles.statBox}>
@@ -299,11 +299,17 @@ export default function SubastaVivoScreen() {
             )}
           </View>
         </View>
+      </View>
 
-        {/* ── 3. Actividad Reciente ──────────────────────────────────────── */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Actividad Reciente</Text>
-
+      {/* ══ ZONA 2: Actividad reciente — se expande y scrollea internamente ══ */}
+      <View style={styles.activityContainer}>
+        <Text style={styles.sectionTitle}>Actividad Reciente</Text>
+        <ScrollView
+          ref={bidsScrollRef}
+          style={styles.bidsScroll}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
           {bids.length === 0 ? (
             <Text style={styles.emptyBids}>Aún no hay pujas. ¡Sé el primero!</Text>
           ) : (
@@ -320,11 +326,15 @@ export default function SubastaVivoScreen() {
               </View>
             ))
           )}
-        </View>
+        </ScrollView>
+      </View>
 
-        {/* ── 4. Banner "solo observador" si no tiene medio verificado ─────── */}
+      {/* ══ ZONA 3: Controles de puja — siempre visibles al fondo ════════════ */}
+      <View style={styles.bidControlsContainer}>
+
+        {/* Banner observador */}
         {puedePublicar === false && (
-          <View style={styles.section}>
+          <View style={[styles.section, { marginTop: 0, marginBottom: 10 }]}>
             <View style={styles.observerBanner}>
               <MaterialCommunityIcons name="eye-outline" size={20} color="#1976D2" />
               <View style={{ flex: 1 }}>
@@ -337,16 +347,16 @@ export default function SubastaVivoScreen() {
           </View>
         )}
 
-        {/* ── 6. Error de registro / loading ────────────────────────────── */}
+        {/* Error / loading de registro */}
         {registroError ? (
-          <View style={styles.section}>
+          <View style={[styles.section, { marginTop: 0, marginBottom: 10 }]}>
             <View style={styles.errorBanner}>
               <MaterialCommunityIcons name="alert-circle-outline" size={18} color="#D32F2F" />
               <Text style={styles.errorBannerText}>{registroError}</Text>
             </View>
           </View>
         ) : asistenteId === null ? (
-          <View style={styles.section}>
+          <View style={[styles.section, { marginTop: 0, marginBottom: 10 }]}>
             <View style={styles.infoBanner}>
               <MaterialCommunityIcons name="loading" size={18} color="#8A6D3B" />
               <Text style={styles.infoBannerText}>Registrando tu participación…</Text>
@@ -354,39 +364,29 @@ export default function SubastaVivoScreen() {
           </View>
         ) : null}
 
-        {/* ── 7. Quick Bid Buttons ───────────────────────────────────────── */}
+        {/* Quick Bid Buttons */}
         {quickBidOptions.length > 0 && puedePublicar && (
-          <View style={styles.section}>
-            <View style={styles.quickBidRow}>
-              {quickBidOptions.map((amount) => {
-                const isActive = selectedQuickBid === amount;
-                return (
-                  <TouchableOpacity
-                    key={amount}
-                    style={[
-                      styles.quickBidButton,
-                      isActive && styles.quickBidButtonActive,
-                    ]}
-                    onPress={() => handleQuickBidSelect(amount)}
-                    activeOpacity={0.7}
-                  >
-                    <Text
-                      style={[
-                        styles.quickBidText,
-                        isActive && styles.quickBidTextActive,
-                      ]}
-                    >
-                      +{formatCurrency(amount)}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+          <View style={styles.quickBidRow}>
+            {quickBidOptions.map((amount) => {
+              const isActive = selectedQuickBid === amount;
+              return (
+                <TouchableOpacity
+                  key={amount}
+                  style={[styles.quickBidButton, isActive && styles.quickBidButtonActive]}
+                  onPress={() => handleQuickBidSelect(amount)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.quickBidText, isActive && styles.quickBidTextActive]}>
+                    +{formatCurrency(amount)}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         )}
 
-        {/* ── 8. Custom Amount Input ─────────────────────────────────────── */}
-        {puedePublicar && <View style={styles.section}>
+        {/* Custom Amount Input */}
+        {puedePublicar && (
           <TextInput
             style={styles.customInput}
             placeholder="Ingresá un incremento personalizado"
@@ -398,48 +398,39 @@ export default function SubastaVivoScreen() {
               if (text.length > 0) setSelectedQuickBid(null);
             }}
           />
-        </View>}
+        )}
 
-        {/* ── 9. PUJAR AHORA Button ──────────────────────────────────────── */}
-        <View style={styles.section}>
-          <TouchableOpacity
-            style={[
-              styles.bidButton,
-              (auctionEnded || isBidding || !asistenteId || !puedePublicar) && styles.bidButtonDisabled,
-            ]}
-            onPress={handlePlaceBid}
-            activeOpacity={0.8}
-            disabled={auctionEnded || isBidding || !asistenteId || !puedePublicar}
-          >
-            <MaterialCommunityIcons name="gavel" size={20} color="#FFFFFF" style={styles.bidButtonIcon} />
-            <Text style={styles.bidButtonText}>
-              {isBidding
-                ? 'PROCESANDO...'
-                : !puedePublicar
-                  ? 'SOLO OBSERVADOR'
-                  : asistenteId === null
-                    ? (registroError ? 'NO PODÉS PUJAR' : 'REGISTRANDO...')
-                    : 'PUJAR AHORA'}
-            </Text>
-          </TouchableOpacity>
-        </View>
+        {/* PUJAR AHORA Button */}
+        <TouchableOpacity
+          style={[
+            styles.bidButton,
+            (auctionEnded || isBidding || !asistenteId || !puedePublicar) && styles.bidButtonDisabled,
+          ]}
+          onPress={handlePlaceBid}
+          activeOpacity={0.8}
+          disabled={auctionEnded || isBidding || !asistenteId || !puedePublicar}
+        >
+          <MaterialCommunityIcons name="gavel" size={20} color="#FFFFFF" style={styles.bidButtonIcon} />
+          <Text style={styles.bidButtonText}>
+            {isBidding
+              ? 'PROCESANDO...'
+              : !puedePublicar
+                ? 'SOLO OBSERVADOR'
+                : asistenteId === null
+                  ? (registroError ? 'NO PODÉS PUJAR' : 'REGISTRANDO...')
+                  : 'PUJAR AHORA'}
+          </Text>
+        </TouchableOpacity>
 
-        {/* ── 8. Disclaimer ──────────────────────────────────────────────── */}
         <Text style={styles.disclaimer}>
           AL PUJAR, ACEPTAS LOS TÉRMINOS Y CONDICIONES Y ASUMES EL COMPROMISO FINANCIERO.
         </Text>
+      </View>
 
-        {/* Bottom spacing */}
-        <View style={{ height: 24 }} />
-      </ScrollView>
-
-      {/* ── 8. Bottom Tab Bar ────────────────────────────────────────────── */}
       <BottomTabBar
         activeTab="explorar"
         onTabPress={(tab) => {
-          if (tab !== 'explorar') {
-            router.push(`/${tab}` as any);
-          }
+          if (tab !== 'explorar') router.push(`/${tab}` as any);
         }}
       />
     </SafeAreaView>
@@ -453,11 +444,27 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FAFBFD',
   },
-  scrollView: {
+
+  // ── Zona 2: Actividad reciente con scroll interno ────────────────────────────
+  activityContainer: {
+    flex: 1,
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    paddingBottom: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+  },
+  bidsScroll: {
     flex: 1,
   },
-  scrollContent: {
+
+  // ── Zona 3: Controles de puja anclados al fondo ──────────────────────────────
+  bidControlsContainer: {
+    paddingHorizontal: 24,
+    paddingTop: 14,
     paddingBottom: 8,
+    backgroundColor: '#FAFBFD',
+    gap: 12,
   },
 
   // ── Sold Overlay ────────────────────────────────────────────────────────────
@@ -640,14 +647,14 @@ const styles = StyleSheet.create({
 
   // ── Sections ────────────────────────────────────────────────────────────────
   section: {
-    paddingHorizontal: 24,
-    marginTop: 20,
+    paddingHorizontal: 0,
+    marginTop: 0,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
     color: '#1A1A1A',
-    marginBottom: 14,
+    marginBottom: 10,
   },
   emptyBids: {
     fontSize: 13,

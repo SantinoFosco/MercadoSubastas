@@ -1,4 +1,4 @@
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+﻿import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React from 'react';
 import {
@@ -19,7 +19,7 @@ export default function InspeccionRechazadaScreen() {
   const { titulo, observaciones, costoDevolucion } = useLocalSearchParams<{ titulo: string; observaciones: string; costoDevolucion: string }>();
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
 
       {/* 1. APPBAR */}
       <Appbar.Header style={styles.appbar}>

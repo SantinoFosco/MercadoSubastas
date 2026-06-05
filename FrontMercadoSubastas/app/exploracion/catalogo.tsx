@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+﻿import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Image, ScrollView, TouchableOpacity, StyleSheet, View } from 'react-native';
 import { Text } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -6,6 +6,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import BottomTabBar from '@/components/BottomTabBar';
 import { API_ENDPOINTS } from '@/constants/api';
+import { SessionStore } from '@/store/session';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -28,10 +29,10 @@ function formatCurrency(amount: number): string {
 
 export default function CatalogoScreen() {
   const router = useRouter();
-  const { subastaId, enVivo } = useLocalSearchParams<{ subastaId: string; enVivo: string }>();
-  const isEnVivo = enVivo === 'true';
+  const { subastaId } = useLocalSearchParams<{ subastaId: string }>();
 
   const [lots, setLots] = useState<ProductoCatalogo[]>([]);
+  const [isEnVivo, setIsEnVivo] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -43,14 +44,32 @@ export default function CatalogoScreen() {
     }
     setLoading(true);
     setError('');
+    setIsEnVivo(false); // resetear siempre al cargar
     try {
-      const res = await fetch(API_ENDPOINTS.catalogoSubasta(subastaId));
-      if (!res.ok) {
+      // Carga el catálogo y verifica enVivo en paralelo
+      const [catalogoRes, homeRes] = await Promise.all([
+        fetch(API_ENDPOINTS.catalogoSubasta(subastaId)),
+        fetch(API_ENDPOINTS.home(SessionStore.getCategoria())),
+      ]);
+
+      if (!catalogoRes.ok) {
         setError('No se encontró el catálogo de esta subasta.');
         return;
       }
-      const json: ProductoCatalogo[] = await res.json();
+
+      const json: ProductoCatalogo[] = await catalogoRes.json();
       setLots(json);
+
+      // Verificar enVivo desde el backend (fuente de verdad)
+      if (homeRes.ok) {
+        const homeData = await homeRes.json();
+        const id = parseInt(subastaId, 10);
+        const destacada = homeData.subastaDestacada;
+        const generales: any[] = homeData.subastasGenerales ?? [];
+        const todas = [...(destacada ? [destacada] : []), ...generales];
+        const match = todas.find((s) => s.subastaId === id);
+        setIsEnVivo(match?.enVivo === true);
+      }
     } catch {
       setError('No se pudo cargar el catálogo. Verificá tu conexión.');
     } finally {
@@ -116,7 +135,7 @@ export default function CatalogoScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity

@@ -21,7 +21,7 @@ const tabs: { key: TabKey; label: string; icon: string }[] = [
 const TAB_ROUTES: Record<TabKey, string> = {
   'explorar':  '/exploracion',
   'mis-pujas': '/mis-pujas',
-  'vender':    '/vender',
+  'vender':    '/vender/mis-articulos',
   'perfil':    '/perfil',
 };
 

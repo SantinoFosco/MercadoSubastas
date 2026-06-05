@@ -5,6 +5,7 @@ APIMercadoSubastas/venv/
 APIMercadoSubastas/.venv/
 APIMercadoSubastas/__pycache__/
 APIMercadoSubastas/app/__pycache__/
+APIMercadoSubastas/app/routers/__pycache__/
 APIMercadoSubastas/.env
 APIMercadoSubastas/*.pyc
 APIMercadoSubastas/*.pyo

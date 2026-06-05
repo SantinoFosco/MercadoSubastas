@@ -125,6 +125,7 @@ def login(db: Session, request: schemas.LoginRequest):
         identificador=persona.identificador,
         nombre=persona.nombre,
         mail=persona_detalle.mail,
+        direccion=persona.direccion or "",
         categoria=cliente.categoria,
         estado=persona.estado,
         claveTemporal=persona_detalle.claveTemporal,

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+﻿import React, { useCallback, useEffect, useState } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { Text } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -6,6 +6,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter, Stack, useLocalSearchParams } from 'expo-router';
 import BottomTabBar from '@/components/BottomTabBar';
 import { API_ENDPOINTS } from '@/constants/api';
+import { SessionStore } from '@/store/session';
 
 type DeliveryMethod = 'domicilio' | 'retiro';
 
@@ -65,7 +66,7 @@ export default function DeliveryDetailsScreen() {
     : ((precio?.precioFinal ?? 0) + (precio?.comision ?? 0));
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
 
       {/* Header */}
@@ -132,7 +133,7 @@ export default function DeliveryDetailsScreen() {
             <View style={styles.deliveryTextContainer}>
               <Text style={styles.deliveryOptionTitle}>Envío a domicilio</Text>
               <Text style={styles.deliveryOptionAddress}>
-                Calle de las Flores 123, Depto 4B{'\n'}Ciudad de México, CP 01000
+                {SessionStore.get()?.direccion ?? 'Dirección no disponible'}
               </Text>
             </View>
             <View style={styles.radioOuter}>

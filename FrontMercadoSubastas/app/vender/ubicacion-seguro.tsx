@@ -1,4 +1,4 @@
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+﻿import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React from 'react';
 import { Image, ScrollView, StyleSheet, View } from 'react-native';
@@ -13,7 +13,7 @@ export default function UbicacionSeguroScreen() {
   const { titulo } = useLocalSearchParams<{ titulo: string }>();
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
 
       {/* 1. APPBAR */}
       <Appbar.Header style={styles.appbar}>
