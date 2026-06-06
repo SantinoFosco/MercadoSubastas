@@ -32,7 +32,9 @@ def get_home(db: Session, categoria: str) -> schemas.HomeResponse:
         return item.producto if item else None
 
     def _en_vivo(subasta) -> bool:
-        return subasta.estado == "abierta"
+        ahora = datetime.now()
+        inicio = datetime.combine(subasta.fecha, subasta.hora)
+        return subasta.estado == "abierta" and inicio <= ahora
 
     dest = subastas[0]
     postores = db.query(models.Asistente).filter(models.Asistente.subasta == dest.identificador).count()

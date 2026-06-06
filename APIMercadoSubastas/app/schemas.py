@@ -473,6 +473,36 @@ class ArticuloListItem(BaseModel):
     costoDevolucion: Optional[float]
     enSubasta: bool
 
+#------------------ Inspección / Admin --------------------#
+
+class InspeccionUpdateRequest(BaseModel):
+    estado: str                           # "aprobado" o "rechazado"
+    observaciones: Optional[str] = None
+    costo_devolucion: Optional[float] = None  # requerido si estado="rechazado"
+    # Solo requeridos si estado="aprobado":
+    subastaId: Optional[int] = None
+    precioBase: Optional[float] = None
+    comision: Optional[float] = None
+
+class AdminSubastaItem(BaseModel):
+    subastaId: int
+    nombre: str
+    fecha: date
+    hora: time
+    categoria: str
+    ubicacion: Optional[str] = None
+
+class AdminArticuloPendiente(BaseModel):
+    productoId: int
+    titulo: str
+    descripcionCompleta: str
+    categoria: str
+    procedencia: Optional[str] = None
+    duenioId: int
+    duenioNombre: str
+    estadoInspeccion: str
+    fechaUltimaActualizacion: Optional[datetime] = None
+
 #------------------ Estadísticas ---------------------------#
 
 class HistorialItemEstadisticas(BaseModel):

@@ -122,7 +122,7 @@ def seed_subastas():
         # Subastas
         hoy = date.today()
         subasta_1 = models.Subasta(
-            fecha=hoy + timedelta(days=30), hora=time(15, 0), estado="abierta",
+            fecha=hoy, hora=time(20, 0), estado="abierta",
             subastador=subastador.identificador, ubicacion="Salón Principal, Av. Alvear 1440, CABA",
             capacidadAsistentes=100, tieneDeposito="si", seguridadPropia="si", categoria="comun",
         )
@@ -754,6 +754,8 @@ if __name__ == "__main__":
 
     if target == "compras":
         seed_compras_prueba()
+    elif target == "historial":
+        seed_historial_prueba()
     else:
         seed_paises()
         seed_empleados()

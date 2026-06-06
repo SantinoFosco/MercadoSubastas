@@ -174,6 +174,124 @@ def ep_multas_pendientes(db: Session = Depends(get_db)):
     return db.query(models.Multa).filter(models.Multa.pagado == "no").all()
 
 
+# ── Inspección de artículos ───────────────────────────────────────────────────
+
+@router.get("/subastas/", response_model=list[schemas.AdminSubastaItem])
+def ep_admin_subastas(db: Session = Depends(get_db)):
+    """Lista todas las subastas con su nombre (tomado del catálogo) e ID."""
+    subastas = db.query(models.Subasta).filter(models.Subasta.estado == "abierta").all()
+    result = []
+    for s in subastas:
+        catalogo = db.query(models.Catalogo).filter(models.Catalogo.subasta == s.identificador).first()
+        result.append(schemas.AdminSubastaItem(
+            subastaId=s.identificador,
+            nombre=catalogo.descripcion if catalogo else f"Subasta #{s.identificador}",
+            fecha=s.fecha,
+            hora=s.hora,
+            categoria=s.categoria,
+            ubicacion=s.ubicacion,
+        ))
+    return result
+
+
+@router.get("/articulos/pendientes", response_model=list[schemas.AdminArticuloPendiente])
+def ep_articulos_pendientes(db: Session = Depends(get_db)):
+    """Lista todos los artículos con inspección pendiente con sus datos completos."""
+    inspecciones = db.query(models.InspeccionProducto).filter(
+        models.InspeccionProducto.estado == "pendiente"
+    ).all()
+    result = []
+    for insp in inspecciones:
+        producto = db.query(models.Producto).filter(
+            models.Producto.identificador == insp.producto
+        ).first()
+        if not producto:
+            continue
+        pp = db.query(models.ProductoPresentacion).filter(
+            models.ProductoPresentacion.producto == insp.producto
+        ).first()
+        duenio_persona = db.query(models.Persona).filter(
+            models.Persona.identificador == producto.duenio
+        ).first()
+        result.append(schemas.AdminArticuloPendiente(
+            productoId=insp.producto,
+            titulo=pp.titulo if pp else f"Producto #{insp.producto}",
+            descripcionCompleta=producto.descripcionCompleta,
+            categoria=pp.categoria if pp else "—",
+            procedencia=pp.procedencia if pp else None,
+            duenioId=producto.duenio,
+            duenioNombre=duenio_persona.nombre if duenio_persona else "Desconocido",
+            estadoInspeccion=insp.estado,
+            fechaUltimaActualizacion=insp.fecha_ultima_actualizacion,
+        ))
+    return result
+
+
+@router.put("/articulos/{producto_id}/inspeccion", response_model=schemas.MensajeResponse)
+def ep_actualizar_inspeccion(
+    producto_id: int,
+    request: schemas.InspeccionUpdateRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Aprueba o rechaza un artículo enviado por un usuario.
+    - Al aprobar: requiere subastaId, precioBase y comision para asignarlo al catálogo.
+    - Al rechazar: requiere costo_devolucion.
+    """
+    estados_validos = {"aprobado", "rechazado"}
+    if request.estado not in estados_validos:
+        raise HTTPException(status_code=422, detail=f"Estado inválido. Usá: {estados_validos}")
+
+    if request.estado == "rechazado" and request.costo_devolucion is None:
+        raise HTTPException(status_code=422, detail="costo_devolucion es requerido al rechazar")
+
+    if request.estado == "aprobado":
+        if request.subastaId is None or request.precioBase is None or request.comision is None:
+            raise HTTPException(status_code=422, detail="subastaId, precioBase y comision son requeridos al aprobar")
+
+    insp = db.query(models.InspeccionProducto).filter(
+        models.InspeccionProducto.producto == producto_id
+    ).first()
+    if not insp:
+        raise HTTPException(status_code=404, detail="Inspección no encontrada para este producto")
+
+    insp.estado = request.estado
+    insp.observaciones = request.observaciones
+    insp.costo_devolucion = request.costo_devolucion
+
+    if request.estado == "aprobado":
+        catalogo = db.query(models.Catalogo).filter(
+            models.Catalogo.subasta == request.subastaId
+        ).first()
+        if not catalogo:
+            raise HTTPException(status_code=404, detail=f"No existe catálogo para la subasta #{request.subastaId}")
+
+        ya_en_catalogo = db.query(models.ItemCatalogo).filter(
+            models.ItemCatalogo.catalogo == catalogo.identificador,
+            models.ItemCatalogo.producto == producto_id,
+        ).first()
+        if ya_en_catalogo:
+            raise HTTPException(status_code=409, detail="El artículo ya está asignado a esa subasta")
+
+        db.add(models.ItemCatalogo(
+            catalogo=catalogo.identificador,
+            producto=producto_id,
+            precioBase=request.precioBase,
+            comision=request.comision,
+            subastado="no",
+        ))
+
+        aceptacion = db.query(models.AceptacionArticulo).filter(
+            models.AceptacionArticulo.producto == producto_id
+        ).first()
+        if not aceptacion:
+            db.add(models.AceptacionArticulo(producto=producto_id, estado="pendiente"))
+
+    db.commit()
+    accion = "aprobado y asignado a la subasta" if request.estado == "aprobado" else "rechazado"
+    return schemas.MensajeResponse(mensaje=f"Artículo #{producto_id} {accion} correctamente.")
+
+
 @router.post("/multas/{multa_id}/confirmar-pago")
 def ep_confirmar_pago_multa(multa_id: int, db: Session = Depends(get_db)):
     """Marca una multa como pagada (admin confirma recepción de fondos)."""

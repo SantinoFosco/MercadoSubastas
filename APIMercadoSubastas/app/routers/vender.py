@@ -38,7 +38,11 @@ def submit_articulo(db: Session, request: schemas.ArticuloSubmitRequest):
     db.add(presentacion)
     db.flush()
 
-    db.add(models.InspeccionProducto(producto=producto.identificador, estado="pendiente"))
+    db.add(models.InspeccionProducto(
+        producto=producto.identificador,
+        estado="pendiente",
+        fecha_ultima_actualizacion=datetime.now(),
+    ))
     db.commit()
 
     return schemas.ArticuloSubmitResponse(
@@ -110,19 +114,27 @@ def get_articulos_cliente(db: Session, cliente_id: int):
         inspeccion = db.query(models.InspeccionProducto).filter(
             models.InspeccionProducto.producto == producto.identificador
         ).first()
-        en_subasta = db.query(models.ItemCatalogo).filter(
+        # Si el producto no tiene registro de inspección no es un artículo
+        # enviado por el usuario (es un producto de seed interno). Se omite.
+        if not inspeccion:
+            continue
+        item_catalogo = db.query(models.ItemCatalogo).filter(
             models.ItemCatalogo.producto == producto.identificador,
-            models.ItemCatalogo.subastado == "si",
-        ).first() is not None
+        ).first()
+        aceptacion_ok = db.query(models.AceptacionArticulo).filter(
+            models.AceptacionArticulo.producto == producto.identificador,
+            models.AceptacionArticulo.estado == "aceptado",
+        ).first()
+        en_subasta = item_catalogo is not None and aceptacion_ok is not None
         result.append(schemas.ArticuloListItem(
             productoId=producto.identificador,
             presentacionId=pp.identificador if pp else 0,
             titulo=pp.titulo if pp else producto.descripcionCatalogo,
             categoria=pp.categoria if pp else "-",
             fechaEnvio=producto.fecha,
-            estadoInspeccion=inspeccion.estado if inspeccion else "pendiente",
-            observaciones=inspeccion.observaciones if inspeccion else None,
-            costoDevolucion=float(inspeccion.costo_devolucion) if inspeccion and inspeccion.costo_devolucion else None,
+            estadoInspeccion=inspeccion.estado,
+            observaciones=inspeccion.observaciones,
+            costoDevolucion=float(inspeccion.costo_devolucion) if inspeccion.costo_devolucion else None,
             enSubasta=en_subasta,
         ))
     return result

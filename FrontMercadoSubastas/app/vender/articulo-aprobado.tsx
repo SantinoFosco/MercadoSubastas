@@ -52,7 +52,7 @@ export default function ArticuloAprobadoScreen() {
     setSubmitting(true);
     try {
       await fetch(API_ENDPOINTS.aceptarCondiciones(productoId), { method: 'POST' });
-      router.push({ pathname: '/vender/ubicacion-seguro', params: { titulo } });
+      router.replace({ pathname: '/vender/ubicacion-seguro', params: { titulo } });
     } finally {
       setSubmitting(false);
     }

@@ -141,11 +141,7 @@ export default function DeliveryDetailsScreen() {
             <View style={styles.deliveryTextContainer}>
               <Text style={styles.deliveryOptionTitle}>Envío a domicilio</Text>
               <Text style={styles.deliveryOptionAddress}>
-<<<<<<< HEAD
                 {SessionStore.get()?.direccion ?? 'Dirección no disponible'}
-=======
-                {direccion || 'Cargando dirección...'}
->>>>>>> 6684904f7b6ab89ab873382485f9091cbbf5da3d
               </Text>
             </View>
             <View style={styles.radioOuter}>
