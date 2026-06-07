@@ -3,6 +3,7 @@ import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useSession } from '@/contexts/SessionContext';
 
 type TabKey = 'explorar' | 'mis-pujas' | 'vender' | 'perfil';
 
@@ -11,7 +12,7 @@ interface BottomTabBarProps {
   onTabPress?: (tab: TabKey) => void;
 }
 
-const tabs: { key: TabKey; label: string; icon: string }[] = [
+const LOGGED_IN_TABS: { key: TabKey; label: string; icon: string }[] = [
   { key: 'explorar',  label: 'Explorar',  icon: 'compass-outline' },
   { key: 'mis-pujas', label: 'Mis pujas', icon: 'gavel' },
   { key: 'vender',    label: 'Vender',    icon: 'plus-circle-outline' },
@@ -25,48 +26,65 @@ const TAB_ROUTES: Record<TabKey, string> = {
   'perfil':    '/perfil',
 };
 
-export default function BottomTabBar({ activeTab = 'mis-pujas', onTabPress }: BottomTabBarProps) {
+export default function BottomTabBar({ activeTab = 'explorar', onTabPress }: BottomTabBarProps) {
   const router = useRouter();
+  const { session } = useSession();
+  const isLoggedIn = !!session;
 
-  function handleTabPress(tab: TabKey) {
-    onTabPress?.(tab);
-    router.replace(TAB_ROUTES[tab] as any);
+  if (!isLoggedIn) {
+    return (
+      <View style={styles.container}>
+        <TouchableOpacity
+          style={styles.tab}
+          onPress={() => router.replace('/exploracion')}
+          activeOpacity={0.7}
+        >
+          {activeTab === 'explorar' ? (
+            <View style={styles.activeIconContainer}>
+              <MaterialCommunityIcons name="compass-outline" size={22} color="#FFFFFF" />
+            </View>
+          ) : (
+            <MaterialCommunityIcons name="compass-outline" size={24} color="#999999" />
+          )}
+          <Text style={[styles.tabLabel, activeTab === 'explorar' && styles.tabLabelActive]}>
+            Explorar
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.tab}
+          onPress={() => router.push('/login')}
+          activeOpacity={0.7}
+        >
+          <MaterialCommunityIcons name="account-circle-outline" size={24} color="#8A6D3B" />
+          <Text style={[styles.tabLabel, styles.loginTabLabel]}>Iniciar sesión</Text>
+        </TouchableOpacity>
+      </View>
+    );
   }
 
   return (
     <View style={styles.container}>
-      {tabs.map((tab) => {
+      {LOGGED_IN_TABS.map((tab) => {
         const isActive = tab.key === activeTab;
         return (
           <TouchableOpacity
             key={tab.key}
             style={styles.tab}
-            onPress={() => handleTabPress(tab.key)}
+            onPress={() => {
+              onTabPress?.(tab.key);
+              router.replace(TAB_ROUTES[tab.key] as any);
+            }}
             activeOpacity={0.7}
           >
             {isActive ? (
               <View style={styles.activeIconContainer}>
-                <MaterialCommunityIcons
-                  name={tab.icon as any}
-                  size={22}
-                  color="#FFFFFF"
-                />
+                <MaterialCommunityIcons name={tab.icon as any} size={22} color="#FFFFFF" />
               </View>
             ) : (
-              <MaterialCommunityIcons
-                name={tab.icon as any}
-                size={24}
-                color="#999999"
-              />
+              <MaterialCommunityIcons name={tab.icon as any} size={24} color="#999999" />
             )}
-            <Text
-              style={[
-                styles.tabLabel,
-                isActive && styles.tabLabelActive,
-              ]}
-            >
-              {tab.label}
-            </Text>
+            <Text style={[styles.tabLabel, isActive && styles.tabLabelActive]}>{tab.label}</Text>
           </TouchableOpacity>
         );
       })}
@@ -106,5 +124,9 @@ const styles = StyleSheet.create({
   tabLabelActive: {
     color: '#1A1A1A',
     fontWeight: '700',
+  },
+  loginTabLabel: {
+    color: '#8A6D3B',
+    fontWeight: '600',
   },
 });

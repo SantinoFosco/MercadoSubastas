@@ -1,3 +1,4 @@
+import base64
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext
@@ -25,12 +26,22 @@ def iniciar_registro(db: Session, request: schemas.RegistroIniciarRequest):
         )
         db.add(nueva_persona)
         db.flush()
+        def _decode_foto(b64: str | None) -> bytes | None:
+            if not b64:
+                return None
+            try:
+                return base64.b64decode(b64)
+            except Exception:
+                return None
+
         db.add(models.PersonaDetalle(
             persona=nueva_persona.identificador,
             pais=request.pais,
             mail=request.mail,
             contrasenia="",
             claveTemporal=True,
+            foto_dni_frente=_decode_foto(request.foto_frente),
+            foto_dni_dorso=_decode_foto(request.foto_dorso),
         ))
         db.commit()
         db.refresh(nueva_persona)
@@ -48,6 +59,9 @@ def get_pendientes(db: Session):
         .filter(~models.PersonaDetalle.persona.in_(with_cliente))
         .all()
     )
+    def _to_b64(data: bytes | None) -> str | None:
+        return base64.b64encode(data).decode("utf-8") if data else None
+
     return [
         schemas.RegistroPendienteResponse(
             personaId=persona.identificador,
@@ -55,6 +69,8 @@ def get_pendientes(db: Session):
             documento=persona.documento,
             mail=detalle.mail,
             pais=detalle.pais,
+            foto_frente=_to_b64(detalle.foto_dni_frente),
+            foto_dorso=_to_b64(detalle.foto_dni_dorso),
         )
         for detalle, persona in rows
     ]

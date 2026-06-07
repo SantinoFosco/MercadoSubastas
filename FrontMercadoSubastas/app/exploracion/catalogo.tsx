@@ -6,7 +6,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import BottomTabBar from '@/components/BottomTabBar';
 import { API_ENDPOINTS } from '@/constants/api';
-import { SessionStore } from '@/store/session';
+import { useSession } from '@/contexts/SessionContext';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -35,6 +35,8 @@ function formatCurrency(amount: number): string {
 export default function CatalogoScreen() {
   const router = useRouter();
   const { subastaId } = useLocalSearchParams<{ subastaId: string }>();
+  const { session, getCategoria } = useSession();
+  const isLoggedIn = !!session;
 
   const [lots, setLots] = useState<ProductoCatalogo[]>([]);
   const [isEnVivo, setIsEnVivo] = useState(false);
@@ -54,7 +56,7 @@ export default function CatalogoScreen() {
     try {
       const [catalogoRes, homeRes] = await Promise.all([
         fetch(API_ENDPOINTS.catalogoSubasta(subastaId)),
-        fetch(API_ENDPOINTS.home(SessionStore.getCategoria())),
+        fetch(API_ENDPOINTS.home(getCategoria())),
       ]);
 
       if (!catalogoRes.ok) {
@@ -82,7 +84,7 @@ export default function CatalogoScreen() {
     } finally {
       setLoading(false);
     }
-  }, [subastaId]);
+  }, [subastaId, getCategoria]);
 
   useEffect(() => { fetchCatalogo(); }, [fetchCatalogo]);
 
@@ -197,7 +199,7 @@ export default function CatalogoScreen() {
           )}
 
           {/* ── Botón En Vivo ───────────────────────────────────────── */}
-          {isEnVivo && (
+          {isEnVivo && isLoggedIn && (
             <TouchableOpacity
               style={styles.liveButton}
               activeOpacity={0.85}
@@ -209,6 +211,16 @@ export default function CatalogoScreen() {
               <View style={styles.liveButtonDot} />
               <MaterialCommunityIcons name="broadcast" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
               <Text style={styles.liveButtonText}>ENTRAR EN VIVO · PUJAR AHORA</Text>
+            </TouchableOpacity>
+          )}
+          {isEnVivo && !isLoggedIn && (
+            <TouchableOpacity
+              style={styles.liveButtonGuest}
+              activeOpacity={0.85}
+              onPress={() => router.push('/sign-in')}
+            >
+              <MaterialCommunityIcons name="lock-outline" size={18} color="#8A6D3B" style={{ marginRight: 8 }} />
+              <Text style={styles.liveButtonGuestText}>INICIÁ SESIÓN PARA PARTICIPAR EN VIVO</Text>
             </TouchableOpacity>
           )}
 
@@ -419,5 +431,23 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '800',
     letterSpacing: 0.8,
+  },
+  liveButtonGuest: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFF8E1',
+    borderRadius: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    marginBottom: 24,
+    borderWidth: 1.5,
+    borderColor: '#FFD700',
+  },
+  liveButtonGuestText: {
+    color: '#8A6D3B',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
 });

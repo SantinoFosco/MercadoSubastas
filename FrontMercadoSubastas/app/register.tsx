@@ -1,5 +1,6 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Stack, useRouter } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
 import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, View, Image, Pressable, Alert, ActivityIndicator } from 'react-native';
 import { Appbar, Button, Text, TextInput, Menu } from 'react-native-paper';
@@ -11,10 +12,31 @@ type Country = {
   nombre: string;
 };
 
+type DniPhoto = {
+  uri: string;
+  base64: string;
+};
+
+async function pickDniPhoto(aspect: [number, number]): Promise<DniPhoto | null> {
+  const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  if (status !== 'granted') {
+    Alert.alert('Permiso denegado', 'Necesitamos acceso a tu galería para subir las fotos del DNI.');
+    return null;
+  }
+  const result = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    allowsEditing: true,
+    aspect,
+    quality: 0.7,
+    base64: true,
+  });
+  if (result.canceled || !result.assets[0].base64) return null;
+  return { uri: result.assets[0].uri, base64: result.assets[0].base64 };
+}
+
 export default function RegisterStep1() {
   const router = useRouter();
 
-  // Estados para los campos
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [documentNumber, setDocumentNumber] = useState('');
@@ -26,6 +48,9 @@ export default function RegisterStep1() {
   const [menuVisible, setMenuVisible] = useState(false);
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+
+  const [dniFrente, setDniFrente] = useState<DniPhoto | null>(null);
+  const [dniDorso, setDniDorso] = useState<DniPhoto | null>(null);
 
   useEffect(() => {
     fetch(API_ENDPOINTS.paises)
@@ -40,18 +65,21 @@ export default function RegisterStep1() {
 
   const handleSubmit = async () => {
     setHasSubmitted(true);
+
     if (!firstName.trim() || !lastName.trim() || !documentNumber.trim() || !email.trim() || !address.trim() || !country) {
       Alert.alert('Campos Incompletos', 'Por favor completa todos los campos marcados en rojo.');
       return;
     }
-
     if (!/^\d+$/.test(documentNumber.trim())) {
       Alert.alert('Documento Inválido', 'El número de documento solo debe contener números, sin puntos ni espacios.');
       return;
     }
-
     if (!email.includes('@')) {
       Alert.alert('Correo Inválido', 'Por favor ingresa un correo electrónico válido que contenga un "@".');
+      return;
+    }
+    if (!dniFrente || !dniDorso) {
+      Alert.alert('Fotos del DNI requeridas', 'Debés subir la foto del frente y del dorso de tu DNI para continuar.');
       return;
     }
 
@@ -67,6 +95,8 @@ export default function RegisterStep1() {
           mail: email.trim(),
           direccion: address.trim(),
           pais: country,
+          foto_frente: dniFrente.base64,
+          foto_dorso: dniDorso.base64,
         }),
       });
 
@@ -76,7 +106,6 @@ export default function RegisterStep1() {
         Alert.alert('Error', data.detail ?? 'Ya existe una cuenta con esos datos.');
         return;
       }
-
       if (!response.ok) {
         Alert.alert('Error', data.detail ?? 'Ocurrió un error al registrar. Intenta nuevamente.');
         return;
@@ -93,27 +122,23 @@ export default function RegisterStep1() {
   return (
     <SafeAreaView style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
-      
-      {/* 1. APPBAR */}
+
+      {/* APPBAR */}
       <Appbar.Header style={styles.appbar}>
         <Appbar.BackAction onPress={() => router.back()} color="#614F3A" />
-        
-        {/* Aquí va el nuevo icono del martillo ovalado */}
-        {/* Recuerda guardar la imagen recortada del ícono como "hammer-icon.png" en assets/images/ */}
-        <Image 
-          source={require('../assets/images/hammer-icon.png')} 
-          style={styles.logoBadge} 
+        <Image
+          source={require('../assets/images/hammer-icon.png')}
+          style={styles.logoBadge}
           resizeMode="contain"
         />
-        
         <View style={{ flex: 1 }} />
         <Text style={styles.appbarText}>REGISTRO</Text>
         <View style={{ width: 16 }} />
       </Appbar.Header>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        
-        {/* 2. PROGRESS BAR */}
+
+        {/* PROGRESS BAR */}
         <View style={styles.progressSection}>
           <View style={styles.progressHeader}>
             <Text style={styles.progressStep}>PASO 1 DE 4</Text>
@@ -127,138 +152,200 @@ export default function RegisterStep1() {
           </View>
         </View>
 
-        {/* 3. CARD PRINCIPAL */}
+        {/* DATOS PERSONALES */}
         <View style={styles.cardContainer}>
-          
-          {/* FOTO DE PERFIL */}
-          <View style={styles.photoSection}>
-            <View style={styles.avatarDashedContainer}>
-              <View style={styles.avatarCircle}>
-                <MaterialCommunityIcons name="account-circle-outline" size={40} color="#BBB" />
-              </View>
-              {/* Iconito de edición amarillo/marrón */}
-              <View style={styles.editIconBadge}>
-                <MaterialCommunityIcons name="pencil" size={12} color="white" />
-              </View>
-            </View>
-            
-            <Button mode="outlined" style={styles.uploadButton} labelStyle={styles.uploadButtonLabel}>
-              Subir Foto
-            </Button>
-            <Text style={styles.photoSubtext}>FOTO DE PERFIL</Text>
+          <View style={styles.formHeader}>
+            <MaterialCommunityIcons name="account-outline" size={24} color="#8A6D3B" style={styles.formHeaderIcon} />
+            <Text style={styles.formTitle}>Información Personal</Text>
           </View>
 
-          {/* DIVIDER */}
-          <View style={styles.divider} />
+          <Text style={[styles.inputLabel, hasSubmitted && !firstName.trim() && styles.errorLabel]}>NOMBRE</Text>
+          <TextInput
+            value={firstName}
+            onChangeText={setFirstName}
+            mode="outlined"
+            style={styles.input}
+            placeholder="Ingresar nombre"
+            outlineColor="#EAEAEA"
+            activeOutlineColor="#8A6D3B"
+            textColor="black"
+            error={hasSubmitted && !firstName.trim()}
+          />
 
-          {/* FORMULARIO */}
-          <View style={styles.formSection}>
-            <View style={styles.formHeader}>
-              <MaterialCommunityIcons name="account-outline" size={24} color="#8A6D3B" style={styles.formHeaderIcon} />
-              <Text style={styles.formTitle}>Información Personal</Text>
-            </View>
-            
-            <Text style={[styles.inputLabel, hasSubmitted && !firstName.trim() && styles.errorLabel]}>NOMBRE</Text>
-            <TextInput
-              value={firstName}
-              onChangeText={setFirstName}
-              mode="outlined"
-              style={styles.input}
-              placeholder="Ingresar nombre"
-              outlineColor="#EAEAEA"
-              activeOutlineColor="#8A6D3B"
-              textColor="black"
-              error={hasSubmitted && !firstName.trim()}
-            />
-            
-            <Text style={[styles.inputLabel, hasSubmitted && !lastName.trim() && styles.errorLabel]}>APELLIDO</Text>
-            <TextInput
-              value={lastName}
-              onChangeText={setLastName}
-              mode="outlined"
-              style={styles.input}
-              placeholder="Ingresar apellido"
-              outlineColor="#EAEAEA"
-              activeOutlineColor="#8A6D3B"
-              textColor="black"
-              error={hasSubmitted && !lastName.trim()}
-            />
-            
-            <Text style={[styles.inputLabel, hasSubmitted && !documentNumber.trim() && styles.errorLabel]}>NUMERO DE DOCUMENTO</Text>
-            <TextInput
-              value={documentNumber}
-              onChangeText={setDocumentNumber}
-              mode="outlined"
-              style={styles.input}
-              placeholder="Ingresar el DNI"
-              outlineColor="#EAEAEA"
-              activeOutlineColor="#8A6D3B"
-              keyboardType="numeric"
-              textColor="black"
-              error={hasSubmitted && !documentNumber.trim()}
-            />
+          <Text style={[styles.inputLabel, hasSubmitted && !lastName.trim() && styles.errorLabel]}>APELLIDO</Text>
+          <TextInput
+            value={lastName}
+            onChangeText={setLastName}
+            mode="outlined"
+            style={styles.input}
+            placeholder="Ingresar apellido"
+            outlineColor="#EAEAEA"
+            activeOutlineColor="#8A6D3B"
+            textColor="black"
+            error={hasSubmitted && !lastName.trim()}
+          />
 
-            <Text style={[styles.inputLabel, hasSubmitted && !email.trim() && styles.errorLabel]}>CORREO ELECTRÓNICO</Text>
-            <TextInput
-              value={email}
-              onChangeText={setEmail}
-              mode="outlined"
-              style={styles.input}
-              placeholder="Ingresar correo electrónico"
-              outlineColor="#EAEAEA"
-              activeOutlineColor="#8A6D3B"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              textColor="black"
-              error={hasSubmitted && !email.trim()}
-            />
+          <Text style={[styles.inputLabel, hasSubmitted && !documentNumber.trim() && styles.errorLabel]}>NÚMERO DE DOCUMENTO</Text>
+          <TextInput
+            value={documentNumber}
+            onChangeText={setDocumentNumber}
+            mode="outlined"
+            style={styles.input}
+            placeholder="Ingresar el DNI"
+            outlineColor="#EAEAEA"
+            activeOutlineColor="#8A6D3B"
+            keyboardType="numeric"
+            textColor="black"
+            error={hasSubmitted && !documentNumber.trim()}
+          />
 
-            <Text style={[styles.inputLabel, hasSubmitted && !address.trim() && styles.errorLabel]}>DIRECCIÓN</Text>
-            <TextInput
-              value={address}
-              onChangeText={setAddress}
-              mode="outlined"
-              style={styles.input}
-              placeholder="Calle, Numero"
-              outlineColor="#EAEAEA"
-              activeOutlineColor="#8A6D3B"
-              textColor="black"
-              error={hasSubmitted && !address.trim()}
-            />
+          <Text style={[styles.inputLabel, hasSubmitted && !email.trim() && styles.errorLabel]}>CORREO ELECTRÓNICO</Text>
+          <TextInput
+            value={email}
+            onChangeText={setEmail}
+            mode="outlined"
+            style={styles.input}
+            placeholder="Ingresar correo electrónico"
+            outlineColor="#EAEAEA"
+            activeOutlineColor="#8A6D3B"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            textColor="black"
+            error={hasSubmitted && !email.trim()}
+          />
 
-            <Text style={[styles.inputLabel, hasSubmitted && !country && styles.errorLabel]}>PAIS</Text>
-            <Menu
-              visible={menuVisible}
-              onDismiss={() => setMenuVisible(false)}
-              contentStyle={{ backgroundColor: 'white' }}
-              anchor={
-                <Pressable onPress={() => !countriesLoading && setMenuVisible(true)}>
-                  <View style={[styles.pickerContainer, hasSubmitted && !country && styles.errorBorder]}>
-                    {countriesLoading ? (
-                      <ActivityIndicator size="small" color="#8A6D3B" />
-                    ) : (
-                      <Text style={styles.pickerText}>
-                        {countries.find(c => c.numero === country)?.nombre || 'Seleccionar País...'}
-                      </Text>
-                    )}
-                    <MaterialCommunityIcons name="chevron-down" size={20} color="#8A6D3B" />
-                  </View>
-                </Pressable>
-              }
-            >
-              {countries.map((c) => (
-                <Menu.Item
-                  key={c.numero}
-                  onPress={() => { setCountry(c.numero); setMenuVisible(false); }}
-                  title={c.nombre}
-                  titleStyle={{ color: '#333' }}
-                />
-              ))}
-            </Menu>
-          </View>
+          <Text style={[styles.inputLabel, hasSubmitted && !address.trim() && styles.errorLabel]}>DIRECCIÓN</Text>
+          <TextInput
+            value={address}
+            onChangeText={setAddress}
+            mode="outlined"
+            style={styles.input}
+            placeholder="Calle, Número"
+            outlineColor="#EAEAEA"
+            activeOutlineColor="#8A6D3B"
+            textColor="black"
+            error={hasSubmitted && !address.trim()}
+          />
+
+          <Text style={[styles.inputLabel, hasSubmitted && !country && styles.errorLabel]}>PAÍS</Text>
+          <Menu
+            visible={menuVisible}
+            onDismiss={() => setMenuVisible(false)}
+            contentStyle={{ backgroundColor: 'white' }}
+            anchor={
+              <Pressable onPress={() => !countriesLoading && setMenuVisible(true)}>
+                <View style={[styles.pickerContainer, hasSubmitted && !country && styles.errorBorder]}>
+                  {countriesLoading ? (
+                    <ActivityIndicator size="small" color="#8A6D3B" />
+                  ) : (
+                    <Text style={styles.pickerText}>
+                      {countries.find(c => c.numero === country)?.nombre || 'Seleccionar País...'}
+                    </Text>
+                  )}
+                  <MaterialCommunityIcons name="chevron-down" size={20} color="#8A6D3B" />
+                </View>
+              </Pressable>
+            }
+          >
+            {countries.map((c) => (
+              <Menu.Item
+                key={c.numero}
+                onPress={() => { setCountry(c.numero); setMenuVisible(false); }}
+                title={c.nombre}
+                titleStyle={{ color: '#333' }}
+              />
+            ))}
+          </Menu>
         </View>
 
-        {/* 4. BOTON Y LEGALES */}
+        {/* FOTOS DEL DNI */}
+        <View style={styles.cardContainer}>
+          <View style={styles.formHeader}>
+            <MaterialCommunityIcons name="card-account-details-outline" size={24} color="#8A6D3B" style={styles.formHeaderIcon} />
+            <Text style={styles.formTitle}>Documento de Identidad</Text>
+          </View>
+          <Text style={styles.dniHelperText}>
+            Subí una foto clara del frente y dorso de tu DNI. Las imágenes son necesarias para verificar tu identidad.
+          </Text>
+
+          <View style={styles.dniRow}>
+            {/* Frente */}
+            <View style={styles.dniSlot}>
+              <Text style={[styles.dniSlotLabel, hasSubmitted && !dniFrente && styles.errorLabel]}>
+                FRENTE
+              </Text>
+              <Pressable
+                onPress={async () => {
+                  const photo = await pickDniPhoto([3, 2]);
+                  if (photo) setDniFrente(photo);
+                }}
+                style={[
+                  styles.dniBox,
+                  dniFrente && styles.dniBoxFilled,
+                  hasSubmitted && !dniFrente && styles.dniBoxError,
+                ]}
+              >
+                {dniFrente ? (
+                  <Image source={{ uri: dniFrente.uri }} style={styles.dniImage} />
+                ) : (
+                  <View style={styles.dniPlaceholder}>
+                    <MaterialCommunityIcons name="card-account-details-outline" size={32} color="#CCC" />
+                    <Text style={styles.dniPlaceholderText}>Tocar para subir</Text>
+                  </View>
+                )}
+                <View style={[styles.dniEditBadge, dniFrente && styles.dniEditBadgeFilled]}>
+                  <MaterialCommunityIcons
+                    name={dniFrente ? 'check' : 'camera'}
+                    size={12}
+                    color="white"
+                  />
+                </View>
+              </Pressable>
+            </View>
+
+            {/* Dorso */}
+            <View style={styles.dniSlot}>
+              <Text style={[styles.dniSlotLabel, hasSubmitted && !dniDorso && styles.errorLabel]}>
+                DORSO
+              </Text>
+              <Pressable
+                onPress={async () => {
+                  const photo = await pickDniPhoto([3, 2]);
+                  if (photo) setDniDorso(photo);
+                }}
+                style={[
+                  styles.dniBox,
+                  dniDorso && styles.dniBoxFilled,
+                  hasSubmitted && !dniDorso && styles.dniBoxError,
+                ]}
+              >
+                {dniDorso ? (
+                  <Image source={{ uri: dniDorso.uri }} style={styles.dniImage} />
+                ) : (
+                  <View style={styles.dniPlaceholder}>
+                    <MaterialCommunityIcons name="card-account-details-outline" size={32} color="#CCC" />
+                    <Text style={styles.dniPlaceholderText}>Tocar para subir</Text>
+                  </View>
+                )}
+                <View style={[styles.dniEditBadge, dniDorso && styles.dniEditBadgeFilled]}>
+                  <MaterialCommunityIcons
+                    name={dniDorso ? 'check' : 'camera'}
+                    size={12}
+                    color="white"
+                  />
+                </View>
+              </Pressable>
+            </View>
+          </View>
+
+          {hasSubmitted && (!dniFrente || !dniDorso) && (
+            <Text style={styles.dniErrorText}>
+              Ambas fotos del DNI son requeridas para continuar.
+            </Text>
+          )}
+        </View>
+
+        {/* BOTÓN Y LEGALES */}
         <View style={styles.footerSection}>
           <Button
             mode="contained"
@@ -267,11 +354,11 @@ export default function RegisterStep1() {
             style={styles.submitButton}
             contentStyle={{ height: 56, flexDirection: 'row-reverse' }}
             labelStyle={styles.submitButtonLabel}
-            icon={isLoading ? undefined : "arrow-right"}
+            icon={isLoading ? undefined : 'arrow-right'}
           >
             {isLoading ? <ActivityIndicator color="white" /> : 'Enviar para Verificación'}
           </Button>
-          
+
           <Text style={styles.footerLegal}>
             Al continuar, aceptas nuestros{' '}
             <Text style={styles.legalLink}>Términos de Servicio</Text> y{'\n'}
@@ -285,14 +372,17 @@ export default function RegisterStep1() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FAFBFD' }, // Fondo super claro
-  // --- Appbar ---
+  container: { flex: 1, backgroundColor: '#FAFBFD' },
+
+  // Appbar
   appbar: { backgroundColor: 'transparent', borderBottomWidth: 1, borderBottomColor: '#F0F0F0', elevation: 0 },
   logoBadge: { width: 50, height: 35 },
   appbarText: { fontWeight: '600', color: '#333', fontSize: 13, letterSpacing: 1 },
-  // --- Scroll ---
+
+  // Scroll
   scrollContent: { paddingHorizontal: 20, paddingVertical: 20, paddingBottom: 40 },
-  // --- Progress Section ---
+
+  // Progress
   progressSection: { marginBottom: 24 },
   progressHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12, alignItems: 'center' },
   progressStep: { color: '#8A6D3B', fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
@@ -301,50 +391,116 @@ const styles = StyleSheet.create({
   bar: { flex: 1, height: 4, borderRadius: 2, marginHorizontal: 2 },
   barActive: { backgroundColor: '#8A6D3B' },
   barInactive: { backgroundColor: '#E4E2DD' },
-  // --- Card Container ---
-  cardContainer: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 24, marginBottom: 24, elevation: 0, borderWidth: 1, borderColor: '#F0F0F0' },
-  // --- Photo ---
-  photoSection: { alignItems: 'center', marginBottom: 24 },
-  avatarDashedContainer: {
-    width: 90, height: 90, borderRadius: 12,
-    borderWidth: 1.5, borderColor: '#EAEAEA', borderStyle: 'dashed',
-    justifyContent: 'center', alignItems: 'center', marginBottom: 12,
-    position: 'relative'
+
+  // Cards
+  cardContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 24,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#F0F0F0',
   },
-  avatarCircle: {
-    width: 60, height: 60, borderRadius: 30, backgroundColor: '#F9F9F9',
-    justifyContent: 'center', alignItems: 'center'
-  },
-  editIconBadge: {
-    position: 'absolute', bottom: -5, right: -5,
-    backgroundColor: '#8A6D3B', width: 24, height: 24, borderRadius: 12,
-    justifyContent: 'center', alignItems: 'center',
-    borderWidth: 2, borderColor: 'white'
-  },
-  uploadButton: { borderRadius: 20, borderColor: '#EAEAEA', height: 36, justifyContent: 'center', backgroundColor: 'white', shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 3, shadowOffset: { width: 0, height: 2 } },
-  uploadButtonLabel: { color: '#333', fontSize: 11, fontWeight: '700' },
-  photoSubtext: { color: '#999', fontSize: 10, marginTop: 8, letterSpacing: 0.5, fontWeight: '600' },
-  // --- Divider ---
-  divider: { height: 1, backgroundColor: '#F0F0F0', marginHorizontal: -24, marginBottom: 24 },
-  // --- Form ---
-  formSection: { },
+
+  // Form header
   formHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
   formHeaderIcon: { marginRight: 10 },
   formTitle: { fontSize: 16, fontWeight: 'bold', color: '#1A1A1A' },
+
+  // Inputs
   inputLabel: { fontSize: 10, fontWeight: 'bold', color: '#666', marginBottom: 8, marginTop: 16 },
-  errorLabel: { color: '#B00020' }, // Color rojo para resaltar campos faltantes
+  errorLabel: { color: '#B00020' },
   input: { backgroundColor: 'white', height: 48, fontSize: 14 },
-  errorBorder: { borderColor: '#B00020' }, // Borde rojo
-  // --- Picker ---
+  errorBorder: { borderColor: '#B00020' },
   pickerContainer: {
-    borderWidth: 1, borderColor: '#EAEAEA', borderRadius: 6, backgroundColor: 'white', height: 48, 
-    justifyContent: 'space-between', alignItems: 'center', flexDirection: 'row', paddingHorizontal: 14
+    borderWidth: 1, borderColor: '#EAEAEA', borderRadius: 6, backgroundColor: 'white', height: 48,
+    justifyContent: 'space-between', alignItems: 'center', flexDirection: 'row', paddingHorizontal: 14,
   },
   pickerText: { color: '#333', fontSize: 14 },
-  // --- Footer ---
-  footerSection: { alignItems: 'center' },
+
+  // DNI section
+  dniHelperText: {
+    fontSize: 12,
+    color: '#999',
+    lineHeight: 18,
+    marginBottom: 16,
+  },
+  dniRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  dniSlot: {
+    flex: 1,
+  },
+  dniSlotLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#666',
+    marginBottom: 8,
+    textAlign: 'center',
+    letterSpacing: 0.5,
+  },
+  dniBox: {
+    height: 110,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#EAEAEA',
+    borderStyle: 'dashed',
+    overflow: 'hidden',
+    position: 'relative',
+    backgroundColor: '#FAFAFA',
+  },
+  dniBoxFilled: {
+    borderStyle: 'solid',
+    borderColor: '#8A6D3B',
+  },
+  dniBoxError: {
+    borderColor: '#B00020',
+    borderStyle: 'solid',
+  },
+  dniImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  dniPlaceholder: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  dniPlaceholderText: {
+    fontSize: 11,
+    color: '#CCC',
+    fontWeight: '500',
+  },
+  dniEditBadge: {
+    position: 'absolute',
+    bottom: 6,
+    right: 6,
+    backgroundColor: '#999',
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: 'white',
+  },
+  dniEditBadgeFilled: {
+    backgroundColor: '#8A6D3B',
+  },
+  dniErrorText: {
+    color: '#B00020',
+    fontSize: 11,
+    marginTop: 10,
+    textAlign: 'center',
+  },
+
+  // Footer
+  footerSection: { alignItems: 'center', marginTop: 8 },
   submitButton: { width: '100%', backgroundColor: '#FFD700', borderRadius: 8, marginBottom: 16 },
   submitButtonLabel: { color: 'white', fontWeight: 'bold', fontSize: 16 },
   footerLegal: { textAlign: 'center', color: '#999', fontSize: 11, lineHeight: 16 },
-  legalLink: { color: '#999', textDecorationLine: 'underline' }
+  legalLink: { color: '#999', textDecorationLine: 'underline' },
 });

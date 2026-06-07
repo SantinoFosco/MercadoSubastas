@@ -338,6 +338,58 @@ def ep_get_compras_cliente(cliente_id: int, db: Session = Depends(get_db)):
     return result
 
 
+@router.get("/clientes/{cliente_id}/pujas", response_model=list[schemas.PujaHistorialItem])
+def ep_get_pujas_cliente(
+    cliente_id: int,
+    ganadas: bool | None = None,
+    db: Session = Depends(get_db),
+):
+    rows = (
+        db.query(models.HistorialPujos)
+        .filter(models.HistorialPujos.cliente == cliente_id)
+        .order_by(models.HistorialPujos.fechaHora.desc())
+        .all()
+    )
+    result = []
+    for h in rows:
+        pujo = db.query(models.Pujo).filter(models.Pujo.identificador == h.pujo).first()
+        if not pujo:
+            continue
+        if ganadas is True and pujo.ganador != "si":
+            continue
+        if ganadas is False and pujo.ganador != "no":
+            continue
+        item = db.query(models.ItemCatalogo).filter(
+            models.ItemCatalogo.identificador == h.itemCatalogo
+        ).first()
+        pp = (
+            db.query(models.ProductoPresentacion)
+            .filter(models.ProductoPresentacion.producto == item.producto)
+            .first()
+            if item else None
+        )
+        titulo = pp.titulo if pp else "Artículo desconocido"
+        estado_pago = None
+        if pujo.ganador == "si" and item:
+            registro = db.query(models.RegistroSubasta).filter(
+                models.RegistroSubasta.subasta == h.subasta,
+                models.RegistroSubasta.producto == item.producto,
+                models.RegistroSubasta.cliente == cliente_id,
+            ).first()
+            if registro:
+                estado_pago = registro.pagado
+        result.append(schemas.PujaHistorialItem(
+            subastaId=h.subasta,
+            itemId=h.itemCatalogo,
+            titulo=titulo,
+            importe=float(h.importe),
+            ganador=pujo.ganador,
+            fechaHora=h.fechaHora,
+            estadoPago=estado_pago,
+        ))
+    return result
+
+
 @router.get("/multas/{cliente_id}", response_model=list[schemas.MultaResponse])
 def ep_get_multas(cliente_id: int, db: Session = Depends(get_db)):
     return db.query(models.Multa).filter(

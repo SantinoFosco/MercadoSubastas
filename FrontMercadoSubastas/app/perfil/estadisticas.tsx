@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import BottomTabBar from '@/components/BottomTabBar';
 import { API_ENDPOINTS } from '@/constants/api';
-import { SessionStore } from '@/store/session';
+import { useSession } from '@/contexts/SessionContext';
 
 type HistorialItem = {
   titulo: string;
@@ -34,13 +34,13 @@ function formatMonto(n: number): string {
 
 export default function EstadisticasScreen() {
   const router = useRouter();
+  const { session } = useSession();
   const [stats, setStats] = useState<Estadisticas | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
     async function fetchStats() {
-      const session = SessionStore.get();
       if (!session) {
         router.replace('/sign-in');
         return;
@@ -57,7 +57,7 @@ export default function EstadisticasScreen() {
       }
     }
     fetchStats();
-  }, []);
+  }, [session]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>

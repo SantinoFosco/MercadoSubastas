@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, Image, ScrollView, TouchableOpacity, StyleSheet, View } from 'react-native';
 import { Text, TextInput } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -6,7 +6,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
 import BottomTabBar from '@/components/BottomTabBar';
 import { API_ENDPOINTS } from '@/constants/api';
-import { SessionStore } from '@/store/session';
+import { useSession } from '@/contexts/SessionContext';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -96,6 +96,8 @@ function getCategoryConfig(categoria: string) {
 
 export default function ExploracionScreen() {
   const router = useRouter();
+  const { session, getCategoria } = useSession();
+  const isLoggedIn = !!session;
   const [data, setData] = useState<HomeData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -104,7 +106,7 @@ export default function ExploracionScreen() {
     setLoading(true);
     setError('');
     try {
-      const categoria = SessionStore.getCategoria();
+      const categoria = getCategoria();
       const res = await fetch(API_ENDPOINTS.home(categoria));
       if (!res.ok) throw new Error('Error al cargar el home');
       const json: HomeData = await res.json();
@@ -114,7 +116,7 @@ export default function ExploracionScreen() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [getCategoria]);
 
   // Refresca cada vez que la pantalla recibe el foco (al volver desde subasta, perfil, etc.)
   useFocusEffect(useCallback(() => { fetchHome(); }, [fetchHome]));
@@ -124,6 +126,22 @@ export default function ExploracionScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+
+      {/* ── Header con estado de sesión ──────────────────────────────── */}
+      <View style={styles.topHeader}>
+        <Text style={styles.topHeaderTitle}>Mercado Subastas</Text>
+        {!isLoggedIn ? (
+          <TouchableOpacity style={styles.loginHeaderBtn} onPress={() => router.push('/login')} activeOpacity={0.8}>
+            <MaterialCommunityIcons name="login" size={15} color="#8A6D3B" />
+            <Text style={styles.loginHeaderText}>Ingresar</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity style={styles.profileHeaderBtn} onPress={() => router.replace('/perfil')} activeOpacity={0.8}>
+            <MaterialCommunityIcons name="account-circle-outline" size={22} color="#8A6D3B" />
+          </TouchableOpacity>
+        )}
+      </View>
+
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
@@ -184,8 +202,13 @@ export default function ExploracionScreen() {
                   )}
 
                   <Text style={styles.liveCardLotInfo}>
-                    SUBASTA #{destacada.subastaId} · {formatTime(destacada.fecha)}
-                    {destacada.enVivo ? ' EN VIVO' : ''}
+                    {(() => {
+                      const d = new Date(destacada.fecha);
+                      const now = new Date();
+                      const diffDays = Math.floor((d.getTime() - now.getTime()) / 86400000);
+                      const label = diffDays === 0 ? 'HOY' : diffDays === -1 ? 'AYER' : d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' });
+                      return `SUBASTA #${destacada.subastaId} · ${label} ${formatTime(destacada.fecha)}${destacada.enVivo ? ' · EN VIVO' : ''}`;
+                    })()}
                   </Text>
 
                   <Text style={styles.liveCardTitle}>
@@ -331,6 +354,43 @@ const styles = StyleSheet.create({
     color: '#D32F2F',
     marginTop: 40,
     fontSize: 14,
+  },
+
+  // ── Top Header ──────────────────────────────────────────────────
+  topHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+    backgroundColor: '#FAFBFD',
+  },
+  topHeaderTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    letterSpacing: 0.3,
+  },
+  loginHeaderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#FFF8E1',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#FFD700',
+  },
+  loginHeaderText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#8A6D3B',
+  },
+  profileHeaderBtn: {
+    padding: 4,
   },
 
   // ── Search ──────────────────────────────────────────────────────

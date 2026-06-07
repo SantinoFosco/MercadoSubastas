@@ -11,6 +11,11 @@ ALTER TABLE subastas
 ALTER TABLE subastas
   ADD CONSTRAINT "chkMonedaSubasta" CHECK (moneda IN ('ARS', 'USD'));
 
+-- Fotos DNI en personas_detalle
+ALTER TABLE personas_detalle
+  ADD COLUMN IF NOT EXISTS foto_dni_frente BYTEA,
+  ADD COLUMN IF NOT EXISTS foto_dni_dorso  BYTEA;
+
 -- 2. Medio de pago y estado de pago en el registro de venta
 ALTER TABLE registro_subastas
   ADD COLUMN IF NOT EXISTS medio_pago INTEGER REFERENCES medios_pago(identificador),

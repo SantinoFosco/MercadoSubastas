@@ -13,7 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { API_ENDPOINTS } from '@/constants/api';
-import { SessionStore } from '@/store/session';
+import { useSession } from '@/contexts/SessionContext';
 
 type MedioPago = {
   id: number;
@@ -48,6 +48,7 @@ type FormTab = 'tarjeta' | 'cuenta_bancaria' | 'cheque_certificado' | null;
 
 export default function MediosPagoScreen() {
   const router = useRouter();
+  const { session } = useSession();
   const [medios, setMedios] = useState<MedioPago[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -70,8 +71,6 @@ export default function MediosPagoScreen() {
   const [bancoCheque, setBancoCheque] = useState('');
   const [numeroCheque, setNumeroCheque] = useState('');
   const [montoCheque, setMontoCheque] = useState('');
-
-  const session = SessionStore.get();
 
   const fetchMedios = useCallback(async () => {
     if (!session) return;

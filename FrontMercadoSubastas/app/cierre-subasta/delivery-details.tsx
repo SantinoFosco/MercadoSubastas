@@ -6,7 +6,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter, Stack, useLocalSearchParams } from 'expo-router';
 import BottomTabBar from '@/components/BottomTabBar';
 import { API_ENDPOINTS } from '@/constants/api';
-import { SessionStore } from '@/store/session';
+import { useSession } from '@/contexts/SessionContext';
 
 type DeliveryMethod = 'domicilio' | 'retiro';
 
@@ -23,6 +23,7 @@ const formatCurrency = (n: number) =>
 export default function DeliveryDetailsScreen() {
   const router = useRouter();
   const { subastaId, clienteId } = useLocalSearchParams<{ subastaId: string; clienteId: string }>();
+  const { session } = useSession();
 
   const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('domicilio');
   const [precio, setPrecio]   = useState<PrecioFinal | null>(null);
@@ -153,7 +154,7 @@ export default function DeliveryDetailsScreen() {
             <View style={styles.deliveryTextContainer}>
               <Text style={styles.deliveryOptionTitle}>Envío a domicilio</Text>
               <Text style={styles.deliveryOptionAddress}>
-                {direccion || SessionStore.get()?.direccion || 'Dirección no disponible'}
+                {direccion || (session as any)?.direccion || 'Dirección no disponible'}
               </Text>
             </View>
             <View style={styles.radioOuter}>

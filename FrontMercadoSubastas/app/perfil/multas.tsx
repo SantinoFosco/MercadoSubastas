@@ -14,7 +14,7 @@ import { useRouter } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
 import BottomTabBar from '@/components/BottomTabBar';
 import { API_ENDPOINTS } from '@/constants/api';
-import { SessionStore } from '@/store/session';
+import { useSession } from '@/contexts/SessionContext';
 
 type Multa = {
   identificador: number;
@@ -31,12 +31,12 @@ function formatCurrency(n: number) {
 
 export default function MultasScreen() {
   const router = useRouter();
+  const { session } = useSession();
+  const clienteId = session?.identificador;
   const [multas, setMultas] = useState<Multa[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [pagando, setPagando] = useState<number | null>(null);
-
-  const clienteId = SessionStore.get()?.identificador;
 
   const fetchMultas = useCallback(async () => {
     if (!clienteId) {

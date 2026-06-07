@@ -14,7 +14,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import BottomTabBar from '@/components/BottomTabBar';
 import { useAuctionWebSocket } from '@/hooks/useAuctionWebSocket';
 import { usePlaceBid } from '@/hooks/usePlaceBid';
-import { SessionStore } from '@/store/session';
+import { useSession } from '@/contexts/SessionContext';
 import { API_ENDPOINTS } from '@/constants/api';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -38,20 +38,22 @@ const formatCurrency = (value: number): string =>
 export default function SubastaVivoScreen() {
   const router = useRouter();
   const { subastaId } = useLocalSearchParams<{ subastaId: string }>();
+  const { session } = useSession();
+  const clienteId = session?.identificador ?? null;
 
   // ── Redirigir si no hay sesión ──────────────────────────────────────────────
   useEffect(() => {
-    if (!SessionStore.get()?.identificador) {
-      router.replace('/login');
+    if (!session?.identificador) {
+      router.replace('/sign-in');
     }
-  }, []);
+  }, [session]);
 
   // ── Registro como asistente ─────────────────────────────────────────────────
   const [asistenteId, setAsistenteId] = useState<number | null>(null);
   const [registroError, setRegistroError] = useState<string | null>(null);
 
   useEffect(() => {
-    const cid = SessionStore.get()?.identificador;
+    const cid = clienteId;
     if (!cid || !subastaId) return;
 
     fetch(API_ENDPOINTS.registrarAsistente, {
@@ -70,9 +72,7 @@ export default function SubastaVivoScreen() {
         }
       })
       .catch(() => setRegistroError('Error de conexión al registrarse.'));
-  }, [subastaId]);
-
-  const clienteId = SessionStore.get()?.identificador ?? null;
+  }, [subastaId, clienteId]);
 
   // ── Verificar si tiene medio de pago aprobado ───────────────────────────────
   const [puedePublicar, setPuedePublicar] = useState<boolean | null>(null);
@@ -199,6 +199,9 @@ export default function SubastaVivoScreen() {
       Alert.alert('Error al pujar', bidError ?? 'Intentá nuevamente.');
     }
   };
+
+  // Guard: no renderizar nada si no hay sesión (el useEffect ya redirige)
+  if (!session?.identificador) return null;
 
   // ── Estado: subasta finalizada (solo para quienes no ganaron nada) ──────────
   if (auctionEnded && !hasWon) {

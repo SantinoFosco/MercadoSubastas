@@ -16,6 +16,8 @@ class RegistroIniciarRequest(BaseModel):
     mail: EmailStr
     direccion: str
     pais: int
+    foto_frente: Optional[str] = None   # base64 del frente del DNI
+    foto_dorso:  Optional[str] = None   # base64 del dorso del DNI
 
 class MensajeResponse(BaseModel):
     mensaje: str
@@ -31,6 +33,8 @@ class RegistroPendienteResponse(BaseModel):
     documento: str
     mail: str
     pais: int
+    foto_frente: Optional[str] = None   # base64 para que el verificador vea el frente del DNI
+    foto_dorso:  Optional[str] = None   # base64 para que el verificador vea el dorso del DNI
 
 class RegistroEstadoResponse(BaseModel):
     verificado: bool
@@ -608,3 +612,14 @@ class AdminPagoPendienteResponse(BaseModel):
     moneda: str
     metodoPago: Optional[str] = None
     fechaLimitePago: Optional[datetime] = None
+
+#------------------ Historial de pujas del cliente ---------#
+
+class PujaHistorialItem(BaseModel):
+    subastaId: int
+    itemId: int
+    titulo: str
+    importe: float
+    ganador: str          # "si" | "no"
+    fechaHora: datetime
+    estadoPago: Optional[str] = None  # solo si ganador=="si": 'no','pendiente','si','vencido'

@@ -5,10 +5,11 @@ import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Tex
 import { Button, Text } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { API_ENDPOINTS } from '../constants/api';
-import { SessionStore } from '../store/session';
+import { useSession } from '../contexts/SessionContext';
 
 export default function SignInScreen() {
   const router = useRouter();
+  const { login } = useSession();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -73,8 +74,8 @@ export default function SignInScreen() {
         return;
       }
 
-      // Guardar sesión (incluye categoria para filtrar el home)
-      await SessionStore.save(data);
+      // Guardar sesión (incluye categoria para filtrar el home) y actualizar el contexto reactivo.
+      await login(data);
 
       // Usuario con registro rechazado: puede ingresar pero no operar
       if (data.admitido === 'no') {

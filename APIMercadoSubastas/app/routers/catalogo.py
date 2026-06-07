@@ -1,8 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from .. import models, schemas
+
+# Argentina is UTC-3 year-round (no DST). Using a fixed offset avoids the
+# mismatch that occurs when Docker runs in UTC but the auction times stored in
+# the DB are expressed in local Argentine time.
+_AR_TZ = timezone(timedelta(hours=-3))
 from ..database import get_db
 from ..utils import get_foto_b64, CATEGORIA_ORDER
 
@@ -15,7 +20,7 @@ def get_home(db: Session, categoria: str) -> schemas.HomeResponse:
     subastas = db.query(models.Subasta).filter(
         models.Subasta.estado == "abierta",
         models.Subasta.categoria.in_(cats_accesibles),
-    ).order_by(models.Subasta.fecha).all()
+    ).order_by(models.Subasta.fecha, models.Subasta.hora).all()
 
     if not subastas:
         return schemas.HomeResponse(subastaDestacada=None, subastasGenerales=[])
@@ -32,7 +37,10 @@ def get_home(db: Session, categoria: str) -> schemas.HomeResponse:
         return item.producto if item else None
 
     def _en_vivo(subasta) -> bool:
-        ahora = datetime.now()
+        # datetime.now(_AR_TZ).replace(tzinfo=None) gives the current naive
+        # Argentina time, so the comparison with the stored naive hora is correct
+        # regardless of the server/Docker timezone.
+        ahora = datetime.now(tz=_AR_TZ).replace(tzinfo=None)
         inicio = datetime.combine(subasta.fecha, subasta.hora)
         if subasta.estado != "abierta" or inicio > ahora:
             return False

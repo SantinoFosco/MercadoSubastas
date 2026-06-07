@@ -3,9 +3,10 @@ import { ActivityIndicator, ScrollView, StyleSheet, Pressable, View } from 'reac
 import { Text } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
+import { useCallback } from 'react';
 import BottomTabBar from '@/components/BottomTabBar';
-import { SessionStore } from '@/store/session';
+import { useSession } from '@/contexts/SessionContext';
 import { API_ENDPOINTS } from '@/constants/api';
 
 type ProfileData = {
@@ -25,60 +26,59 @@ const CATEGORIA_LABEL: Record<string, string> = {
 
 export default function PerfilScreen() {
   const router = useRouter();
+  const { session, logout } = useSession();
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [multasPendientes, setMultasPendientes] = useState(0);
 
-  useEffect(() => {
-    async function fetchProfile() {
-      const session = SessionStore.get();
-      if (!session) {
-        router.replace('/login');
-        return;
-      }
-
-      try {
-        const [clienteRes, multasRes] = await Promise.all([
-          fetch(API_ENDPOINTS.perfilCompleto(session.identificador)),
-          fetch(API_ENDPOINTS.multasCliente(session.identificador)),
-        ]);
+  const fetchProfile = useCallback(async () => {
+    if (!session) {
+      router.replace('/login');
+      return;
+    }
+    setLoading(true);
+    setError('');
+    try {
+      const [clienteRes, multasRes] = await Promise.all([
+        fetch(API_ENDPOINTS.perfilCompleto(session.identificador)),
+        fetch(API_ENDPOINTS.multasCliente(session.identificador)),
+      ]);
 
         if (!clienteRes.ok) throw new Error('Error al obtener perfil');
-        const perfilData = await clienteRes.json();
+      const perfilData = await clienteRes.json();
 
-        let paisNombre = '-';
-        if (perfilData.numeroPais) {
-          const paisRes = await fetch(API_ENDPOINTS.paisDetalle(perfilData.numeroPais));
-          if (paisRes.ok) {
-            const paisData = await paisRes.json();
-            paisNombre = paisData.nombre;
-          }
+      let paisNombre = '-';
+      if (perfilData.numeroPais) {
+        const paisRes = await fetch(API_ENDPOINTS.paisDetalle(perfilData.numeroPais));
+        if (paisRes.ok) {
+          const paisData = await paisRes.json();
+          paisNombre = paisData.nombre;
         }
-
-        setProfile({
-          nombre: perfilData.nombre,
-          correo: perfilData.mail,
-          categoria: CATEGORIA_LABEL[perfilData.categoria] ?? perfilData.categoria,
-          pais: paisNombre,
-        });
-
-        if (multasRes.ok) {
-          const multas = await multasRes.json();
-          setMultasPendientes(multas.length);
-        }
-      } catch {
-        setError('No se pudo cargar el perfil.');
-      } finally {
-        setLoading(false);
       }
-    }
 
-    fetchProfile();
-  }, []);
+      setProfile({
+        nombre: perfilData.nombre,
+        correo: perfilData.mail,
+        categoria: CATEGORIA_LABEL[perfilData.categoria] ?? perfilData.categoria,
+        pais: paisNombre,
+      });
+
+      if (multasRes.ok) {
+        const multas = await multasRes.json();
+        setMultasPendientes(multas.length);
+      }
+    } catch {
+      setError('No se pudo cargar el perfil.');
+    } finally {
+      setLoading(false);
+    }
+  }, [session]);
+
+  useFocusEffect(useCallback(() => { fetchProfile(); }, [fetchProfile]));
 
   const handleLogout = () => {
-    SessionStore.clear();
+    logout();
     router.replace('/login');
   };
 
@@ -91,8 +91,10 @@ export default function PerfilScreen() {
       ]
     : [];
 
+  if (!session) return null;
+
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}

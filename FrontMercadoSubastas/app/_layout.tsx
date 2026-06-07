@@ -1,5 +1,5 @@
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { SessionStore } from '@/store/session';
+import { SessionProvider, useSession } from '@/contexts/SessionContext';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -14,22 +14,22 @@ const { LightTheme, DarkTheme: NavDarkTheme } = adaptNavigationTheme({
   reactNavigationDark: DarkTheme,
 });
 
-export default function RootLayout() {
+// Inner component — lives INSIDE SessionProvider so it can call useSession().
+function AppShell() {
   const colorScheme = useColorScheme();
   const paperTheme = colorScheme === 'dark' ? MD3DarkTheme : MD3LightTheme;
   const navTheme = colorScheme === 'dark' ? NavDarkTheme : LightTheme;
-  const [ready, setReady] = useState(false);
+  const { isLoading } = useSession();
+  const [splashHidden, setSplashHidden] = useState(false);
 
   useEffect(() => {
-    async function init() {
-      await SessionStore.load();
-      await SplashScreen.hideAsync();
-      setReady(true);
+    if (!isLoading) {
+      SplashScreen.hideAsync().then(() => setSplashHidden(true));
     }
-    init();
-  }, []);
+  }, [isLoading]);
 
-  if (!ready) return null;
+  // Keep the splash screen visible while the session is being loaded/validated.
+  if (!splashHidden) return null;
 
   return (
     <PaperProvider theme={paperTheme}>
@@ -41,5 +41,13 @@ export default function RootLayout() {
         <StatusBar style="auto" />
       </ThemeProvider>
     </PaperProvider>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <SessionProvider>
+      <AppShell />
+    </SessionProvider>
   );
 }

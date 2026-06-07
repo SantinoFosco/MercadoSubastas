@@ -1,6 +1,6 @@
 ﻿import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -14,7 +14,7 @@ import { Appbar, Text, Menu } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import BottomTabBar from '@/components/BottomTabBar';
 import { API_ENDPOINTS } from '@/constants/api';
-import { SessionStore } from '@/store/session';
+import { useSession } from '@/contexts/SessionContext';
 import * as ImagePicker from 'expo-image-picker';
 
 const CATEGORY_OPTIONS = [
@@ -37,6 +37,11 @@ const IMAGE_SLOTS = [
 
 export default function SubastarArticuloScreen() {
   const router = useRouter();
+  const { session } = useSession();
+
+  useEffect(() => {
+    if (!session) router.replace('/login');
+  }, [session]);
 
   const [articleName, setArticleName] = useState('');
   const [category, setCategory] = useState('Relojería de Lujo');
@@ -75,7 +80,6 @@ export default function SubastarArticuloScreen() {
   };
 
   const handleSubmit = async () => {
-    const session = SessionStore.get();
     if (!session) {
       router.replace('/sign-in');
       return;
@@ -118,8 +122,10 @@ export default function SubastarArticuloScreen() {
     </View>
   );
 
+  if (!session) return null;
+
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <Appbar.Header style={styles.appbar}>
         <Appbar.BackAction onPress={() => router.back()} color="#614F3A" />
         <Image

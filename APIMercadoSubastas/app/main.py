@@ -15,7 +15,8 @@ async def lifespan(app: FastAPI):
             seed_subastas, seed_subastas_categorias,
             seed_usuario_prueba, seed_usuario_prueba_2,
             seed_usuario_cheque, seed_usuario_especial,
-            seed_subasta_usd, seed_historial_prueba,
+            seed_subasta_usd, seed_subasta_en_vivo,
+            seed_historial_prueba,
             seed_articulos_vendedor, seed_configuracion,
         )
         seed_paises()
@@ -28,6 +29,7 @@ async def lifespan(app: FastAPI):
         seed_usuario_cheque()
         seed_usuario_especial()
         seed_subasta_usd()
+        seed_subasta_en_vivo()
         seed_historial_prueba()
         seed_articulos_vendedor()
         seed_configuracion()

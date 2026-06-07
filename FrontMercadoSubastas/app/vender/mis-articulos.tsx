@@ -6,7 +6,7 @@ import { Appbar, Text } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import BottomTabBar from '@/components/BottomTabBar';
 import { API_ENDPOINTS } from '@/constants/api';
-import { SessionStore } from '@/store/session';
+import { useSession } from '@/contexts/SessionContext';
 
 type ArticleStatus = 'pendiente' | 'aprobado' | 'rechazado' | 'en_venta';
 type FilterTab = 'todos' | 'aprobados' | 'en_revision';
@@ -50,6 +50,7 @@ function resolveStatus(item: { estadoInspeccion: string; enSubasta: boolean }): 
 
 export default function MisArticulosScreen() {
   const router = useRouter();
+  const { session } = useSession();
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -58,7 +59,6 @@ export default function MisArticulosScreen() {
 
   useEffect(() => {
     async function fetchArticles() {
-      const session = SessionStore.get();
       if (!session) { router.replace('/login'); return; }
       try {
         const res = await fetch(API_ENDPOINTS.misArticulos(session.identificador));
@@ -87,7 +87,7 @@ export default function MisArticulosScreen() {
       }
     }
     fetchArticles();
-  }, []);
+  }, [session]);
 
   const filtered = articles.filter((a) => {
     if (activeFilter === 'aprobados') return a.estadoInspeccion === 'aprobado' || a.estadoInspeccion === 'en_venta';
@@ -111,8 +111,10 @@ export default function MisArticulosScreen() {
     }
   };
 
+  if (!session) return null;
+
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <Appbar.Header style={styles.appbar}>
         <Appbar.BackAction onPress={() => router.back()} color="#614F3A" />
         <Image source={require('../../assets/images/hammer-icon.png')} style={styles.logoBadge} resizeMode="contain" />

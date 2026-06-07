@@ -57,6 +57,10 @@ export const API_ENDPOINTS = {
   paisDetalle:           (numero: number | string) => `${API_BASE_URL}/paises/${numero}`,
   estadisticasCliente:   (id: number | string) => `${API_BASE_URL}/clientes/${id}/estadisticas`,
   misComprasCliente:     (id: number | string) => `${API_BASE_URL}/clientes/${id}/compras`,
+  misPujasCliente:       (id: number | string, ganadas?: boolean) =>
+                           ganadas === undefined
+                             ? `${API_BASE_URL}/clientes/${id}/pujas`
+                             : `${API_BASE_URL}/clientes/${id}/pujas?ganadas=${ganadas}`,
   multasCliente:         (id: number | string) => `${API_BASE_URL}/multas/${id}`,
   pagarMulta:            (multaId: number | string, clienteId: number | string) =>
                            `${API_BASE_URL}/multas/${multaId}/pagar?cliente_id=${clienteId}`,

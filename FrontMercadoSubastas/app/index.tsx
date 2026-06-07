@@ -1,7 +1,7 @@
-import { SessionStore } from '@/store/session';
 import { Redirect } from 'expo-router';
 
+// Explorar is the public home screen — accessible with or without a session.
+// Login/register is reached via the BottomTabBar "Iniciar sesión" tab.
 export default function Index() {
-  const session = SessionStore.get();
-  return <Redirect href={session ? '/exploracion' : '/login'} />;
+  return <Redirect href="/exploracion" />;
 }

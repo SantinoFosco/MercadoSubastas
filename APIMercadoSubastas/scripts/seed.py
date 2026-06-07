@@ -17,7 +17,7 @@ from passlib.context import CryptContext
 from app import models
 from app.database import SessionLocal
 
-# Minimal 1x1 white JPEG used as placeholder photo for seeded products
+# Minimal 1x1 white JPEG used as fallback placeholder
 _FOTO_BYTES = base64.b64decode(
     "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgMCAgMDAwMEAwMEBQgFBQQEBQoH"
     "BwYIDAoMCwsKCwsNCxAQDQ4RDgsLEBYQERMUFRUVDA8XGBYUGBIUFRT/2wBDAQME"
@@ -26,6 +26,16 @@ _FOTO_BYTES = base64.b64decode(
     "EABQQAQAAAAAAAAAAAAAAAAAAAAD/xAAUAQEAAAAAAAAAAAAAAAAAAAAA/8QAFBEBAAAA"
     "AAAAAAAAAAAAAAAAAP/aAAwDAQACEQMRAD8AJQAB/9k="
 )
+
+_SEED_IMAGES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "seed_images")
+
+
+def _load_foto(filename: str) -> bytes:
+    path = os.path.join(_SEED_IMAGES_DIR, filename)
+    if os.path.exists(path):
+        with open(path, "rb") as f:
+            return f.read()
+    return _FOTO_BYTES
 
 
 def _add_foto(db, producto_id: int) -> None:
@@ -123,18 +133,18 @@ def seed_subastas():
 
         # Presentaciones y fotos
         datos_pp = [
-            ("Reloj de Bolsillo Suizo — Siglo XIX",       "Relojes y Joyería", "Suiza"),
-            ("Jarrón de Porcelana China — Dinastía Ming",  "Arte Oriental",     "China"),
-            ("Bodegón Flamenco — Escuela del XVII",        "Pintura y Arte",    "Países Bajos"),
-            ("Colección Numismática Romana",                "Numismática",       "Italia"),
-            ("Silla Luis XV — Francia 1750",               "Muebles Antiguos",  "Francia"),
+            ("Reloj de Bolsillo Suizo — Siglo XIX",       "Relojes y Joyería", "Suiza",        "reloj.jpg"),
+            ("Jarrón de Porcelana China — Dinastía Ming",  "Arte Oriental",     "China",        "jarron.jpg"),
+            ("Bodegón Flamenco — Escuela del XVII",        "Pintura y Arte",    "Países Bajos", "oilPainitng.jpg"),
+            ("Colección Numismática Romana",                "Numismática",       "Italia",       "CoinCollection.jpg"),
+            ("Silla Luis XV — Francia 1750",               "Muebles Antiguos",  "Francia",      "armchair,.jpg"),
         ]
-        for articulo, (titulo, cat, procedencia) in zip(articulos, datos_pp):
+        for articulo, (titulo, cat, procedencia, img) in zip(articulos, datos_pp):
             db.add(models.ProductoPresentacion(
                 producto=articulo.identificador, titulo=titulo, categoria=cat,
                 procedencia=procedencia, declaracionLegal="si", estado="publicado",
             ))
-            db.add(models.Foto(producto=articulo.identificador, foto=_FOTO_BYTES))
+            db.add(models.Foto(producto=articulo.identificador, foto=_load_foto(img)))
         db.flush()
 
         # Subastas
@@ -267,8 +277,8 @@ def seed_subastas_categorias():
                     "subasta": {"fecha": hoy + _td(days=10), "hora": _time(14, 0), "ubicacion": "Sala Especial A, Av. Cabildo 100, CABA", "capacidad": 80},
                     "catalogo": "Subasta Especial — Lote A",
                     "productos": [
-                        ("Broche victoriano en oro", "Broche victoriano en oro 18k con diamantes de corte antiguo, circa 1880.", "Joyería", "Reino Unido", 200000, 12),
-                        ("Telescopio refractor siglo XIX", "Telescopio refractor de latón, circa 1870, fabricante inglés, longitud 90 cm.", "Instrumentos", "Reino Unido", 175000, 10),
+                        ("Broche victoriano en oro", "Broche victoriano en oro 18k con diamantes de corte antiguo, circa 1880.", "Joyería", "Reino Unido", 200000, 12, "brooch.jpg"),
+                        ("Telescopio refractor siglo XIX", "Telescopio refractor de latón, circa 1870, fabricante inglés, longitud 90 cm.", "Instrumentos", "Reino Unido", 175000, 10, "telescope.jpg"),
                     ]
                 },
             ]),
@@ -277,8 +287,8 @@ def seed_subastas_categorias():
                     "subasta": {"fecha": hoy + _td(days=12), "hora": _time(11, 0), "ubicacion": "Salón Plata, Posadas 1200, CABA", "capacidad": 50},
                     "catalogo": "Subasta Plata — Lote A",
                     "productos": [
-                        ("Escultura bronce Art Déco", "Escultura en bronce patinado, estilo Art Déco, figura femenina danzante, circa 1925, 55 cm.", "Escultura", "Francia", 450000, 14),
-                        ("Piano de cola Bösendorfer 1910", "Piano de cola Bösendorfer, modelo 170, Viena circa 1910, restaurado profesionalmente.", "Instrumentos Musicales", "Austria", 1800000, 15),
+                        ("Escultura bronce Art Déco", "Escultura en bronce patinado, estilo Art Déco, figura femenina danzante, circa 1925, 55 cm.", "Escultura", "Francia", 450000, 14, "sculpture.jpg"),
+                        ("Piano de cola Bösendorfer 1910", "Piano de cola Bösendorfer, modelo 170, Viena circa 1910, restaurado profesionalmente.", "Instrumentos Musicales", "Austria", 1800000, 15, "piano.jpg"),
                     ]
                 },
             ]),
@@ -287,8 +297,8 @@ def seed_subastas_categorias():
                     "subasta": {"fecha": hoy + _td(days=15), "hora": _time(15, 0), "ubicacion": "Suite Oro, Alvear Palace Hotel, CABA", "capacidad": 30},
                     "catalogo": "Subasta Oro — Lote A",
                     "productos": [
-                        ("Collar diamantes Belle Époque", "Collar en platino con 48 diamantes talla brillante, peso total 12 ct, circa 1905, certificado GIA.", "Alta Joyería", "Francia", 3500000, 18),
-                        ("Reloj Patek Philippe ref. 2499", "Patek Philippe ref. 2499, calendario perpetuo cronógrafo, oro rosa 18k, circa 1960.", "Relojería", "Suiza", 9500000, 18),
+                        ("Collar diamantes Belle Époque", "Collar en platino con 48 diamantes talla brillante, peso total 12 ct, circa 1905, certificado GIA.", "Alta Joyería", "Francia", 3500000, 18, "necklace.jpg"),
+                        ("Reloj Patek Philippe ref. 2499", "Patek Philippe ref. 2499, calendario perpetuo cronógrafo, oro rosa 18k, circa 1960.", "Relojería", "Suiza", 9500000, 18, "luxury watch.jpg"),
                     ]
                 },
             ]),
@@ -297,8 +307,8 @@ def seed_subastas_categorias():
                     "subasta": {"fecha": hoy + _td(days=8), "hora": _time(20, 0), "ubicacion": "Penthouse Exclusivo, Puerto Madero, CABA", "capacidad": 15},
                     "catalogo": "Subasta Platino — Lote A",
                     "productos": [
-                        ("Obra Picasso — Período Azul", "Óleo sobre lienzo, Pablo Picasso, circa 1903, período azul, autenticado por el Musée Picasso París, 95x75 cm.", "Pintura Moderna", "España", 85000000, 25),
-                        ("Diamante azul — 18 quilates", "Diamante azul fancy vivid, talla cojín, 18.02 ct, certificado GIA FL.", "Gemas", "Sudáfrica", 120000000, 22),
+                        ("Obra Picasso — Período Azul", "Óleo sobre lienzo, Pablo Picasso, circa 1903, período azul, autenticado por el Musée Picasso París, 95x75 cm.", "Pintura Moderna", "España", 85000000, 25, "Picasso.jpg"),
+                        ("Diamante azul — 18 quilates", "Diamante azul fancy vivid, talla cojín, 18.02 ct, certificado GIA FL.", "Gemas", "Sudáfrica", 120000000, 22, "blue diamond.jpg"),
                     ]
                 },
             ]),
@@ -318,7 +328,7 @@ def seed_subastas_categorias():
                 catalogo = models.Catalogo(descripcion=lote["catalogo"], subasta=subasta.identificador, responsable=1)
                 db.add(catalogo)
                 db.flush()
-                for desc_corta, desc_larga, cat_pp, procedencia, precio, comision in lote["productos"]:
+                for desc_corta, desc_larga, cat_pp, procedencia, precio, comision, img in lote["productos"]:
                     producto = models.Producto(
                         descripcionCatalogo=desc_corta, descripcionCompleta=desc_larga,
                         revisor=1, duenio=duenio_id, disponible="si",
@@ -329,7 +339,7 @@ def seed_subastas_categorias():
                         producto=producto.identificador, titulo=desc_corta, categoria=cat_pp,
                         procedencia=procedencia, declaracionLegal="si", estado="publicado",
                     ))
-                    db.add(models.Foto(producto=producto.identificador, foto=_FOTO_BYTES))
+                    db.add(models.Foto(producto=producto.identificador, foto=_load_foto(img)))
                     db.add(models.ItemCatalogo(
                         catalogo=catalogo.identificador, producto=producto.identificador,
                         precioBase=precio, comision=comision, subastado="no",
@@ -662,7 +672,7 @@ def seed_subasta_usd():
             categoria="Numismática", procedencia="Estados Unidos",
             declaracionLegal="si", estado="publicado",
         ))
-        db.add(models.Foto(producto=producto.identificador, foto=_FOTO_BYTES))
+        db.add(models.Foto(producto=producto.identificador, foto=_load_foto("Gold Eagle 1 oz coin.jpg")))
         item = models.ItemCatalogo(
             catalogo=catalogo.identificador, producto=producto.identificador,
             precioBase=1800, comision=5, subastado="no",
@@ -715,6 +725,7 @@ def seed_articulos_vendedor():
                 "estado_inspeccion": "pendiente",
                 "observaciones": None,
                 "costo_devolucion": None,
+                "img": "Leica M3.jpg",
             },
             {
                 "descripcionCatalogo": "Violín italiano siglo XVIII",
@@ -725,6 +736,7 @@ def seed_articulos_vendedor():
                 "estado_inspeccion": "aprobado",
                 "observaciones": None,
                 "costo_devolucion": None,
+                "img": "violin.jpg",
             },
             {
                 "descripcionCatalogo": "Reloj de pared Art Nouveau",
@@ -735,6 +747,7 @@ def seed_articulos_vendedor():
                 "estado_inspeccion": "rechazado",
                 "observaciones": "El mecanismo presenta daños irreparables. No cumple estándares de venta.",
                 "costo_devolucion": 3500.00,
+                "img": "wall clock.jpg",
             },
         ]
 
@@ -751,6 +764,7 @@ def seed_articulos_vendedor():
                 categoria=art["categoria"], procedencia=art["procedencia"],
                 declaracionLegal="si", estado="publicado",
             ))
+            db.add(models.Foto(producto=producto.identificador, foto=_load_foto(art["img"])))
             from datetime import datetime as _dt
             db.add(models.InspeccionProducto(
                 producto=producto.identificador,
@@ -769,6 +783,79 @@ def seed_articulos_vendedor():
         db.close()
 
 
+def seed_subasta_en_vivo():
+    """Crea una subasta que ya comenzó (fecha = ayer) para poder probar el modo EN VIVO."""
+    db = SessionLocal()
+    try:
+        if db.query(models.Persona).filter(models.Persona.documento == "00000010").first():
+            print("✓ Subasta en vivo ya existe, se omite")
+            return
+
+        p_sub = db.query(models.Persona).filter(models.Persona.documento == "00000001").first()
+        if not p_sub:
+            print("✗ Subastador no encontrado. Corré seed_subastas() primero.")
+            return
+        subastador_id = db.query(models.Subastador).filter(
+            models.Subastador.identificador == p_sub.identificador
+        ).first().identificador
+
+        p_due = db.query(models.Persona).filter(models.Persona.documento == "00000002").first()
+        duenio_id = p_due.identificador
+
+        ayer = date.today() - timedelta(days=1)
+        subasta = models.Subasta(
+            fecha=ayer, hora=time(20, 0), estado="abierta",
+            subastador=subastador_id, ubicacion="Salón EN VIVO, Av. Alvear 1440, CABA",
+            capacidadAsistentes=100, tieneDeposito="si", seguridadPropia="si", categoria="comun",
+        )
+        db.add(subasta)
+        db.flush()
+
+        catalogo = models.Catalogo(
+            descripcion="Subasta en Vivo — Lote de Prueba",
+            subasta=subasta.identificador, responsable=1,
+        )
+        db.add(catalogo)
+        db.flush()
+
+        productos_vivo = [
+            ("Reloj de Bolsillo Suizo — Siglo XIX", "Reloj de bolsillo suizo, circa 1890, caja de plata maciza, movimiento de 17 rubíes.", "Relojes y Joyería", "Suiza", 150000, 10, "reloj.jpg"),
+            ("Jarrón de Porcelana China — Dinastía Ming", "Jarrón de porcelana china de la dinastía Ming, circa 1400, decoración floral en azul y blanco, 42 cm.", "Arte Oriental", "China", 320000, 10, "jarron.jpg"),
+            ("Bodegón Flamenco — Escuela del XVII", "Pintura al óleo sobre lienzo, escuela flamenca, siglo XVII, bodegón con frutas y animales, 80x60 cm.", "Pintura y Arte", "Países Bajos", 280000, 12, "oilPainitng.jpg"),
+        ]
+
+        for desc_corta, desc_larga, cat_pp, procedencia, precio, comision, img in productos_vivo:
+            producto = models.Producto(
+                descripcionCatalogo=desc_corta, descripcionCompleta=desc_larga,
+                revisor=1, duenio=duenio_id, disponible="si",
+            )
+            db.add(producto)
+            db.flush()
+            db.add(models.ProductoPresentacion(
+                producto=producto.identificador, titulo=desc_corta, categoria=cat_pp,
+                procedencia=procedencia, declaracionLegal="si", estado="publicado",
+            ))
+            db.add(models.Foto(producto=producto.identificador, foto=_load_foto(img)))
+            db.add(models.ItemCatalogo(
+                catalogo=catalogo.identificador, producto=producto.identificador,
+                precioBase=precio, comision=comision, subastado="no",
+            ))
+            db.flush()
+            db.add(models.AceptacionArticulo(producto=producto.identificador, estado="pendiente"))
+
+        # Marcador para detectar que ya se creó
+        p_marker = models.Persona(nombre="Marker Vivo", documento="00000010", direccion="-", estado="activo")
+        db.add(p_marker)
+
+        db.commit()
+        print(f"✓ Subasta en vivo creada (fecha=ayer, id={subasta.identificador}) — aparece con badge EN VIVO")
+    except Exception as e:
+        db.rollback()
+        raise e
+    finally:
+        db.close()
+
+
 if __name__ == "__main__":
     target = sys.argv[1] if len(sys.argv) > 1 else "all"
 
@@ -776,6 +863,8 @@ if __name__ == "__main__":
         seed_compras_prueba()
     elif target == "historial":
         seed_historial_prueba()
+    elif target == "vivo":
+        seed_subasta_en_vivo()
     else:
         seed_paises()
         seed_empleados()
@@ -787,6 +876,7 @@ if __name__ == "__main__":
         seed_usuario_cheque()
         seed_usuario_especial()
         seed_subasta_usd()
+        seed_subasta_en_vivo()
         seed_historial_prueba()
         seed_articulos_vendedor()
         seed_configuracion()

@@ -39,6 +39,8 @@ class PersonaDetalle(Base):
     mail = Column(String, nullable=False, unique=True)
     contrasenia = Column(String, nullable=False)
     claveTemporal = Column(Boolean, nullable=False)
+    foto_dni_frente = Column(LargeBinary, nullable=True)
+    foto_dni_dorso  = Column(LargeBinary, nullable=True)
     
 class Empleado(Base):
     __tablename__ = "empleados"
