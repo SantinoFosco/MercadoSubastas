@@ -101,6 +101,7 @@ def desaprobar_registro(db: Session, request: schemas.RegistroVerificacionReques
         identificador=persona.identificador,
         numeroPais=persona_detalle.pais,
         admitido="no",
+        categoria="comun",
         verificador=request.verificador,
     ))
     db.commit()

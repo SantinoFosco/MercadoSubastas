@@ -42,7 +42,7 @@ export default function SubastaVivoScreen() {
   // ── Redirigir si no hay sesión ──────────────────────────────────────────────
   useEffect(() => {
     if (!SessionStore.get()?.identificador) {
-      router.replace('/sign-in');
+      router.replace('/login');
     }
   }, []);
 
@@ -102,7 +102,7 @@ export default function SubastaVivoScreen() {
   // Al terminar la subasta: si ganó algo → ir al resumen de compras y pago.
   useEffect(() => {
     if (!auctionEnded || !hasWon || !subastaId || !clienteId) return;
-    router.push({
+    router.replace({
       pathname: '/cierre-subasta/winner',
       params: { subastaId: subastaId, clienteId: String(clienteId) },
     });
@@ -209,12 +209,7 @@ export default function SubastaVivoScreen() {
           <Text style={styles.endedTitle}>¡Subasta finalizada!</Text>
           <Text style={styles.endedSubtitle}>Todos los lotes fueron adjudicados.</Text>
         </View>
-        <BottomTabBar
-          activeTab="explorar"
-          onTabPress={(tab) => {
-            if (tab !== 'explorar') router.push(`/${tab}` as any);
-          }}
-        />
+        <BottomTabBar activeTab="explorar" />
       </SafeAreaView>
     );
   }
@@ -427,12 +422,7 @@ export default function SubastaVivoScreen() {
         </Text>
       </View>
 
-      <BottomTabBar
-        activeTab="explorar"
-        onTabPress={(tab) => {
-          if (tab !== 'explorar') router.push(`/${tab}` as any);
-        }}
-      />
+      <BottomTabBar activeTab="explorar" />
     </SafeAreaView>
   );
 }

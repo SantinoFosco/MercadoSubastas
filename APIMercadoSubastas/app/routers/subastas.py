@@ -243,11 +243,27 @@ def create_pujo(db: Session, request: schemas.PujoRequest):
     if not asistente:
         return None, "asistente"
 
+    # Re-verificar multa en cada puja (el asistente pudo tener multa generada después de registrarse)
+    multa = db.query(models.Multa).filter(
+        models.Multa.cliente == asistente.cliente,
+        models.Multa.pagado == "no",
+    ).first()
+    if multa:
+        return None, "multa_pendiente"
+
     item = db.query(models.ItemCatalogo).filter(models.ItemCatalogo.identificador == request.itemId).first()
     if not item:
         return None, "item"
     if item.subastado == "si":
         return None, "item_cerrado"
+
+    # Verificar que el asistente no sea ya el mejor postor
+    ganador_actual = db.query(models.Pujo).filter(
+        models.Pujo.item == request.itemId,
+        models.Pujo.ganador == "si",
+    ).first()
+    if ganador_actual and ganador_actual.asistente == request.asistenteId:
+        return None, "ya_es_ganador"
 
     catalogo = db.query(models.Catalogo).filter(models.Catalogo.identificador == item.catalogo).first()
     if not catalogo or asistente.subasta != catalogo.subasta:
@@ -402,6 +418,10 @@ async def _cerrar_item(item_id: int, subasta_id: int):
             if next_item_id not in _item_timers or _item_timers[next_item_id].done():
                 _item_timers[next_item_id] = asyncio.create_task(_cerrar_item(next_item_id, subasta_id))
         else:
+            subasta_upd = db.query(models.Subasta).filter(models.Subasta.identificador == subasta_id).first()
+            if subasta_upd:
+                subasta_upd.estado = "cerrada"
+                db.commit()
             await manager.broadcast(subasta_id, {"type": "auction_ended", "data": {"subastaId": subasta_id}})
 
     except Exception:
@@ -517,6 +537,10 @@ async def ep_pujar(request: schemas.PujoRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=403, detail="Necesitás al menos un medio de pago verificado para pujar")
     if error == "excede_cheque":
         raise HTTPException(status_code=422, detail="Esta puja excede el monto disponible de tu cheque certificado")
+    if error == "multa_pendiente":
+        raise HTTPException(status_code=403, detail="Tenés una multa pendiente de pago. Debés abonarla antes de pujar.")
+    if error == "ya_es_ganador":
+        raise HTTPException(status_code=409, detail="Ya sos el mejor postor de este ítem")
     if error == "importe_bajo":
         raise HTTPException(status_code=422, detail="El importe es inferior al mínimo permitido")
     if error == "importe_alto":

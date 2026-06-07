@@ -56,11 +56,17 @@ export const API_ENDPOINTS = {
   perfilCompleto:        (id: number | string) => `${API_BASE_URL}/clientes/${id}/perfil`,
   paisDetalle:           (numero: number | string) => `${API_BASE_URL}/paises/${numero}`,
   estadisticasCliente:   (id: number | string) => `${API_BASE_URL}/clientes/${id}/estadisticas`,
+  misComprasCliente:     (id: number | string) => `${API_BASE_URL}/clientes/${id}/compras`,
   multasCliente:         (id: number | string) => `${API_BASE_URL}/multas/${id}`,
+  pagarMulta:            (multaId: number | string, clienteId: number | string) =>
+                           `${API_BASE_URL}/multas/${multaId}/pagar?cliente_id=${clienteId}`,
   // Admin
   adminPagosPendientes:  `${API_BASE_URL}/admin/pagos/pendientes`,
   adminConfirmarPago:    (id: number | string) => `${API_BASE_URL}/admin/pagos/${id}/confirmar`,
   adminRechazarPago:     (id: number | string) => `${API_BASE_URL}/admin/pagos/${id}/rechazar`,
-  adminMultasPendientes: `${API_BASE_URL}/admin/multas/pendientes`,
-  adminConfirmarMulta:   (id: number | string) => `${API_BASE_URL}/admin/multas/${id}/confirmar-pago`,
+  adminMultasPendientes:   `${API_BASE_URL}/admin/multas/pendientes`,
+  adminConfirmarMulta:     (id: number | string) => `${API_BASE_URL}/admin/multas/${id}/confirmar-pago`,
+  adminProcesarVencidos:   `${API_BASE_URL}/admin/pagos/procesar-vencidos`,
+  adminVerificarMedioPago: (id: number | string, estado: string) =>
+                             `${API_BASE_URL}/admin/medios-pago/${id}/estado?estado=${estado}`,
 };

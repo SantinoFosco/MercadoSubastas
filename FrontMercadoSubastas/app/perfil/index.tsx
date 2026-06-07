@@ -29,13 +29,12 @@ export default function PerfilScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [multasPendientes, setMultasPendientes] = useState(0);
-  const [pagosPendientes, setPagosPendientes] = useState(0);
 
   useEffect(() => {
     async function fetchProfile() {
       const session = SessionStore.get();
       if (!session) {
-        router.replace('/sign-in');
+        router.replace('/login');
         return;
       }
 
@@ -60,7 +59,7 @@ export default function PerfilScreen() {
         setProfile({
           nombre: perfilData.nombre,
           correo: perfilData.mail,
-          categoria: CATEGORIA_LABEL[session.categoria] ?? session.categoria,
+          categoria: CATEGORIA_LABEL[perfilData.categoria] ?? perfilData.categoria,
           pais: paisNombre,
         });
 
@@ -78,18 +77,9 @@ export default function PerfilScreen() {
     fetchProfile();
   }, []);
 
-  const handleTabPress = (tab: string) => {
-    switch (tab) {
-      case 'explorar': router.push('/exploracion'); break;
-      case 'vender': router.push('/vender'); break;
-      case 'perfil': break;
-      case 'mis-pujas': break;
-    }
-  };
-
   const handleLogout = () => {
     SessionStore.clear();
-    router.replace('/sign-in');
+    router.replace('/login');
   };
 
   const fields = profile
@@ -142,6 +132,23 @@ export default function PerfilScreen() {
           )}
         </View>
 
+        {/* ─── Medios de Pago Button ──────────────────────────────── */}
+        <Pressable
+          style={styles.statsButton}
+          onPress={() => router.push('/perfil/medios-pago')}
+        >
+          <View style={styles.statsButtonLeft}>
+            <View style={styles.statsIconCircle}>
+              <MaterialCommunityIcons name="credit-card-outline" size={22} color="#8A6D3B" />
+            </View>
+            <View>
+              <Text style={styles.statsButtonTitle}>Mis Medios de Pago</Text>
+              <Text style={styles.statsButtonSubtitle}>Ver y gestionar métodos de pago</Text>
+            </View>
+          </View>
+          <MaterialCommunityIcons name="chevron-right" size={24} color="#8A6D3B" />
+        </Pressable>
+
         {/* ─── Estadísticas Button ────────────────────────────────── */}
         <Pressable
           style={styles.statsButton}
@@ -187,7 +194,7 @@ export default function PerfilScreen() {
         </Pressable>
       </ScrollView>
 
-      <BottomTabBar activeTab="perfil" onTabPress={handleTabPress} />
+      <BottomTabBar activeTab="perfil" />
     </SafeAreaView>
   );
 }

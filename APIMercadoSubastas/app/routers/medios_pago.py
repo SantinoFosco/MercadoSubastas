@@ -249,20 +249,17 @@ def ep_update_medio_pago(medio_pago_id: int, request: schemas.DescripcionUpdate,
         raise HTTPException(status_code=404, detail="Medio de pago no encontrado")
     return result
 
-@router.put("/{medio_pago_id}/estado", response_model=schemas.MedioPagoItem)
-def ep_update_estado_medio_pago(medio_pago_id: int, estado: str = Query(...), db: Session = Depends(get_db)):
-    if estado not in ("verificado", "rechazado", "pendiente"):
-        raise HTTPException(status_code=422, detail="Estado inválido. Opciones: verificado, rechazado, pendiente")
-    medio = db.query(models.MedioPago).filter(models.MedioPago.identificador == medio_pago_id).first()
-    if not medio:
-        raise HTTPException(status_code=404, detail="Medio de pago no encontrado")
-    medio.estado = estado
-    db.commit()
-    db.refresh(medio)
-    return _build_medio_pago_item(medio, db)
-
 @router.delete("/{medio_pago_id}")
 def ep_delete_medio_pago(medio_pago_id: int, db: Session = Depends(get_db)):
+    uso_activo = db.query(models.RegistroSubasta).filter(
+        models.RegistroSubasta.medio_pago == medio_pago_id,
+        models.RegistroSubasta.pagado.in_(["no", "pendiente"]),
+    ).first()
+    if uso_activo:
+        raise HTTPException(
+            status_code=409,
+            detail="No podés eliminar este medio de pago: tiene pagos pendientes asociados.",
+        )
     if delete_medio_pago(db, medio_pago_id) is None:
         raise HTTPException(status_code=404, detail="Medio de pago no encontrado")
     return {"message": f"Medio de pago {medio_pago_id} eliminado con éxito"}

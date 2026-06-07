@@ -62,7 +62,7 @@ export default function WinnerScreen() {
       <Stack.Screen options={{ headerShown: false }} />
 
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} activeOpacity={0.7}>
+        <TouchableOpacity onPress={() => router.replace('/exploracion')} activeOpacity={0.7}>
           <MaterialCommunityIcons name="arrow-left" size={26} color="#1A1A1A" />
         </TouchableOpacity>
       </View>
@@ -138,6 +138,7 @@ export default function WinnerScreen() {
               <Text style={styles.totalLabel}>TOTAL</Text>
               <Text style={styles.totalValue}>{formatCurrency(precio.total)}</Text>
             </View>
+            <Text style={styles.envioNote}>* El costo de envío se calcula en el siguiente paso.</Text>
           </View>
         )}
 
@@ -162,7 +163,7 @@ export default function WinnerScreen() {
 
         <TouchableOpacity
           style={styles.secondaryButton}
-          onPress={() => router.push('/exploracion')}
+          onPress={() => router.replace('/exploracion')}
           activeOpacity={0.85}
         >
           <Text style={styles.secondaryButtonText}>Volver a explorar</Text>
@@ -170,7 +171,7 @@ export default function WinnerScreen() {
 
       </ScrollView>
 
-      <BottomTabBar activeTab="explorar" onTabPress={(tab) => router.push(`/${tab}` as any)} />
+      <BottomTabBar activeTab="mis-pujas" />
     </SafeAreaView>
   );
 }
@@ -249,6 +250,7 @@ const styles = StyleSheet.create({
   totalValue: { fontSize: 16, fontWeight: '800', color: '#8A6D3B' },
   thankYouCard: { backgroundColor: '#F5F6F8', borderRadius: 12, padding: 20, marginBottom: 24 },
   thankYouText: { fontSize: 13, color: '#555555', lineHeight: 20, textAlign: 'center' },
+  envioNote: { fontSize: 11, color: '#999999', marginTop: 8, textAlign: 'right', fontStyle: 'italic' },
   thankYouBold: { fontWeight: '800', color: '#1A1A1A' },
   primaryButton: {
     backgroundColor: '#FFD700', borderRadius: 8, height: 56,

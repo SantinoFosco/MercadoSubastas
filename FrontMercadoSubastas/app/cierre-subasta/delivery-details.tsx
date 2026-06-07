@@ -27,20 +27,26 @@ export default function DeliveryDetailsScreen() {
   const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('domicilio');
   const [precio, setPrecio]   = useState<PrecioFinal | null>(null);
   const [direccion, setDireccion] = useState<string>('');
+  const [costoEnvioDomicilio, setCostoEnvioDomicilio] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [confirming, setConfirming] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!subastaId || !clienteId) return;
     try {
-      const [precioRes, perfilRes] = await Promise.all([
+      const [precioRes, perfilRes, configRes] = await Promise.all([
         fetch(API_ENDPOINTS.precioTotal(subastaId, clienteId)),
         fetch(API_ENDPOINTS.perfilCompleto(clienteId)),
+        fetch(API_ENDPOINTS.configEmpresa('costo_envio_domicilio')),
       ]);
       if (precioRes.ok) setPrecio(await precioRes.json());
       if (perfilRes.ok) {
         const perfil = await perfilRes.json();
         setDireccion(perfil.direccion ?? '');
+      }
+      if (configRes.ok) {
+        const cfg = await configRes.json();
+        setCostoEnvioDomicilio(parseFloat(cfg.valor) || 0);
       }
     } finally {
       setLoading(false);
@@ -53,9 +59,14 @@ export default function DeliveryDetailsScreen() {
     if (!subastaId || !clienteId) return;
     setConfirming(true);
     try {
-      await fetch(API_ENDPOINTS.confirmarEnvio(subastaId, clienteId, deliveryMethod), {
+      const res = await fetch(API_ENDPOINTS.confirmarEnvio(subastaId, clienteId, deliveryMethod), {
         method: 'POST',
       });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        Alert.alert('Error', err.detail ?? 'No se pudo confirmar el método de entrega. Intentá de nuevo.');
+        return;
+      }
       router.push({
         pathname: '/cierre-subasta/confirm-payment',
         params: { subastaId, clienteId },
@@ -67,11 +78,12 @@ export default function DeliveryDetailsScreen() {
     }
   };
 
-  // Envío: se cobra solo si elige domicilio (el back lo calcula tras confirmar_envio)
-  const envioVisible = deliveryMethod === 'domicilio' ? (precio?.envio ?? 0) : 0;
-  const totalVisible = deliveryMethod === 'domicilio'
-    ? (precio?.total ?? 0)
-    : ((precio?.precioFinal ?? 0) + (precio?.comision ?? 0));
+  // El costo de envío se obtiene de la config cuando no hay valor guardado aún en DB
+  const envioPreview = deliveryMethod === 'domicilio'
+    ? ((precio?.envio ?? 0) > 0 ? precio!.envio : costoEnvioDomicilio)
+    : 0;
+  const envioVisible = envioPreview;
+  const totalVisible = (precio?.precioFinal ?? 0) + (precio?.comision ?? 0) + envioVisible;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -141,7 +153,7 @@ export default function DeliveryDetailsScreen() {
             <View style={styles.deliveryTextContainer}>
               <Text style={styles.deliveryOptionTitle}>Envío a domicilio</Text>
               <Text style={styles.deliveryOptionAddress}>
-                {SessionStore.get()?.direccion ?? 'Dirección no disponible'}
+                {direccion || SessionStore.get()?.direccion || 'Dirección no disponible'}
               </Text>
             </View>
             <View style={styles.radioOuter}>

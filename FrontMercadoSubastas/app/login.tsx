@@ -36,7 +36,7 @@ export default function LoginScreen() {
             Comenzar Registro
           </Button>
 
-          <Pressable onPress={() => router.push('/sign-in')} style={styles.loginLink}>
+          <Pressable onPress={() => router.replace('/sign-in')} style={styles.loginLink}>
             <Text variant="titleMedium" style={styles.loginText}>Iniciar Sesión</Text>
           </Pressable>
         </View>

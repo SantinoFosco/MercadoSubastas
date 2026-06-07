@@ -59,7 +59,7 @@ export default function MisArticulosScreen() {
   useEffect(() => {
     async function fetchArticles() {
       const session = SessionStore.get();
-      if (!session) { router.replace('/sign-in'); return; }
+      if (!session) { router.replace('/login'); return; }
       try {
         const res = await fetch(API_ENDPOINTS.misArticulos(session.identificador));
         if (!res.ok) throw new Error();
@@ -201,7 +201,7 @@ export default function MisArticulosScreen() {
         <MaterialCommunityIcons name="plus" size={30} color="#FFFFFF" />
       </TouchableOpacity>
 
-      <BottomTabBar activeTab="vender" onTabPress={(tab) => { if (tab === 'explorar') router.push('/exploracion'); if (tab === 'perfil') router.push('/perfil'); }} />
+      <BottomTabBar activeTab="vender" />
     </SafeAreaView>
   );
 }

@@ -221,6 +221,20 @@ class PrecioFinal(BaseModel):
     envio: float
     total: float
 
+class CompraClienteResponse(BaseModel):
+    registroId: int
+    subastaId: int
+    productoId: int
+    titulo: str
+    importe: Decimal
+    comision: Decimal
+    costoEnvio: Decimal
+    total: Decimal
+    pagado: str
+    metodoEnvio: Optional[str] = None
+    fechaLimitePago: Optional[datetime] = None
+    imagen: Optional[str] = None
+
 #------------------ Personas -------------------------------#
 
 class SectorCreate(BaseModel):

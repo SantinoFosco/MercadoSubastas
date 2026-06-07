@@ -30,9 +30,7 @@ export default function BottomTabBar({ activeTab = 'mis-pujas', onTabPress }: Bo
 
   function handleTabPress(tab: TabKey) {
     onTabPress?.(tab);
-    if (tab !== activeTab) {
-      router.push(TAB_ROUTES[tab] as any);
-    }
+    router.replace(TAB_ROUTES[tab] as any);
   }
 
   return (

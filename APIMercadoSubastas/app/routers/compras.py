@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -158,6 +159,10 @@ async def confirmar_pago(db: Session, subasta_id: int, usuario_id: int, metodo_p
     if not registros:
         return None, "sin_compras"
 
+    # Idempotencia: si ya están todos pendientes con el mismo medio, no reenviar
+    if all(r.pagado == "pendiente" and r.medio_pago == metodo_pago_id for r in registros):
+        return None, "ya_confirmado"
+
     # Calcular total real (importe + comisión + envío)
     costo_envio = float(registros[0].costo_envio) if registros[0].costo_envio else 0.0
     total = round(
@@ -190,7 +195,6 @@ async def confirmar_pago(db: Session, subasta_id: int, usuario_id: int, metodo_p
             # Notificar por email
             mail, nombre = _get_mail_cliente(db, usuario_id)
             importe_original = sum(float(r.importe) for r in registros)
-            import asyncio
             asyncio.create_task(send_multa_notification(
                 to_email=mail,
                 nombre=nombre,
@@ -226,7 +230,6 @@ async def confirmar_pago(db: Session, subasta_id: int, usuario_id: int, metodo_p
     metodo_envio = registros[0].metodo_envio or "retiro"
     mail, nombre = _get_mail_cliente(db, usuario_id)
 
-    import asyncio
     asyncio.create_task(send_payment_notification(
         to_email=mail,
         nombre=nombre,
@@ -291,6 +294,8 @@ async def ep_confirmar_pago(
         raise HTTPException(status_code=422, detail="El medio de pago no está verificado")
     if error == "sin_compras":
         raise HTTPException(status_code=409, detail="No hay compras pendientes de pago en esta subasta")
+    if error == "ya_confirmado":
+        raise HTTPException(status_code=409, detail="El pago ya fue registrado con este medio de pago.")
     if error == "fondos_insuficientes":
         raise HTTPException(
             status_code=422,
@@ -305,6 +310,34 @@ async def ep_confirmar_pago(
     return result
 
 
+@router.get("/clientes/{cliente_id}/compras", response_model=list[schemas.CompraClienteResponse])
+def ep_get_compras_cliente(cliente_id: int, db: Session = Depends(get_db)):
+    registros = db.query(models.RegistroSubasta).filter(
+        models.RegistroSubasta.cliente == cliente_id,
+    ).order_by(models.RegistroSubasta.identificador.desc()).all()
+    result = []
+    for r in registros:
+        pp = db.query(models.ProductoPresentacion).filter(
+            models.ProductoPresentacion.producto == r.producto
+        ).first()
+        costo_envio = float(r.costo_envio) if r.costo_envio else 0.0
+        result.append(schemas.CompraClienteResponse(
+            registroId=r.identificador,
+            subastaId=r.subasta,
+            productoId=r.producto,
+            titulo=pp.titulo if pp else f"Artículo #{r.producto}",
+            importe=r.importe,
+            comision=r.comision,
+            costoEnvio=r.costo_envio or 0,
+            total=round(float(r.importe) + float(r.comision) + costo_envio, 2),
+            pagado=r.pagado,
+            metodoEnvio=r.metodo_envio,
+            fechaLimitePago=r.fecha_limite_pago,
+            imagen=get_foto_b64(db, r.producto),
+        ))
+    return result
+
+
 @router.get("/multas/{cliente_id}", response_model=list[schemas.MultaResponse])
 def ep_get_multas(cliente_id: int, db: Session = Depends(get_db)):
     return db.query(models.Multa).filter(
@@ -314,10 +347,12 @@ def ep_get_multas(cliente_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/multas/{multa_id}/pagar")
-def ep_pagar_multa(multa_id: int, db: Session = Depends(get_db)):
+def ep_pagar_multa(multa_id: int, cliente_id: int = Query(...), db: Session = Depends(get_db)):
     multa = db.query(models.Multa).filter(models.Multa.identificador == multa_id).first()
     if not multa:
         raise HTTPException(status_code=404, detail="Multa no encontrada")
+    if multa.cliente != cliente_id:
+        raise HTTPException(status_code=403, detail="Esta multa no pertenece al cliente indicado")
     if multa.pagado == "si":
         raise HTTPException(status_code=409, detail="La multa ya fue pagada")
     multa.pagado = "si"

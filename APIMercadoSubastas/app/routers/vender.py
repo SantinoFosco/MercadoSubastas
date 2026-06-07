@@ -11,16 +11,21 @@ router = APIRouter(tags=["Vender / Artículos"])
 # ── CRUD ─────────────────────────────────────────────────────────────────────
 
 def submit_articulo(db: Session, request: schemas.ArticuloSubmitRequest):
+    empleado = db.query(models.Empleado).first()
+    if not empleado:
+        raise HTTPException(status_code=503, detail="No hay empleados configurados en el sistema")
+    empleado_id = empleado.identificador
+
     duenio = db.query(models.Duenio).filter(models.Duenio.identificador == request.clienteId).first()
     if not duenio:
-        duenio = models.Duenio(identificador=request.clienteId, numeroPais=None, verificador=1)
+        duenio = models.Duenio(identificador=request.clienteId, numeroPais=None, verificador=empleado_id)
         db.add(duenio)
         db.flush()
 
     producto = models.Producto(
         descripcionCatalogo=request.titulo[:100],
         descripcionCompleta=request.descripcionCompleta,
-        revisor=1,
+        revisor=empleado_id,
         duenio=duenio.identificador,
         disponible="si",
     )
@@ -175,9 +180,11 @@ def get_estadisticas_cliente(db: Session, cliente_id: int):
         item = db.query(models.ItemCatalogo).filter(
             models.ItemCatalogo.identificador == h.itemCatalogo
         ).first()
+        if not item:
+            continue
         pp = db.query(models.ProductoPresentacion).filter(
             models.ProductoPresentacion.producto == item.producto
-        ).first() if item else None
+        ).first()
         pujo = db.query(models.Pujo).filter(models.Pujo.identificador == h.pujo).first()
         historial.append(schemas.HistorialItemEstadisticas(
             titulo=pp.titulo if pp else "Producto desconocido",

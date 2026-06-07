@@ -292,6 +292,70 @@ def ep_actualizar_inspeccion(
     return schemas.MensajeResponse(mensaje=f"Artículo #{producto_id} {accion} correctamente.")
 
 
+@router.post("/pagos/procesar-vencidos")
+def ep_procesar_vencidos(db: Session = Depends(get_db)):
+    """
+    Marca como 'vencido' todos los registros de compra cuyo fecha_limite_pago
+    ya pasó y genera la multa del 10% correspondiente. Ejecutar manualmente.
+    """
+    ahora = datetime.now()
+    vencidos = db.query(models.RegistroSubasta).filter(
+        models.RegistroSubasta.pagado.in_(["no", "pendiente"]),
+        models.RegistroSubasta.fecha_limite_pago != None,
+        models.RegistroSubasta.fecha_limite_pago < ahora,
+    ).all()
+
+    procesados = []
+    for r in vencidos:
+        r.pagado = "vencido"
+        monto_multa = round(float(r.importe) * 0.10, 2)
+        ya_tiene_multa = db.query(models.Multa).filter(
+            models.Multa.cliente == r.cliente,
+            models.Multa.subasta == r.subasta,
+            models.Multa.pagado == "no",
+        ).first()
+        if not ya_tiene_multa:
+            db.add(models.Multa(
+                cliente=r.cliente,
+                subasta=r.subasta,
+                monto=monto_multa,
+                pagado="no",
+                fecha_limite=ahora + timedelta(hours=DEADLINE_PAGO_HORAS),
+            ))
+        procesados.append({
+            "registroId": r.identificador,
+            "clienteId": r.cliente,
+            "multaGenerada": not ya_tiene_multa,
+            "multaMonto": monto_multa,
+        })
+
+    db.commit()
+    return {
+        "mensaje": f"{len(procesados)} registro(s) marcados como vencidos.",
+        "procesados": procesados,
+    }
+
+
+@router.put("/medios-pago/{medio_pago_id}/estado")
+def ep_admin_update_estado_medio_pago(
+    medio_pago_id: int,
+    estado: str,
+    db: Session = Depends(get_db),
+):
+    """Solo admin puede verificar o rechazar medios de pago de clientes."""
+    if estado not in ("verificado", "rechazado", "pendiente"):
+        raise HTTPException(status_code=422, detail="Estado inválido. Opciones: verificado, rechazado, pendiente")
+    medio = db.query(models.MedioPago).filter(
+        models.MedioPago.identificador == medio_pago_id
+    ).first()
+    if not medio:
+        raise HTTPException(status_code=404, detail="Medio de pago no encontrado")
+    medio.estado = estado
+    db.commit()
+    db.refresh(medio)
+    return {"id": medio.identificador, "tipo": medio.tipo, "estado": medio.estado, "mensaje": f"Estado actualizado a '{estado}'"}
+
+
 @router.post("/multas/{multa_id}/confirmar-pago")
 def ep_confirmar_pago_multa(multa_id: int, db: Session = Depends(get_db)):
     """Marca una multa como pagada (admin confirma recepción de fondos)."""

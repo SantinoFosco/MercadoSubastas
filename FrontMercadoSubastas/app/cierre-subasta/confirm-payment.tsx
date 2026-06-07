@@ -154,7 +154,7 @@ export default function ConfirmPaymentScreen() {
 
           <TouchableOpacity
             style={styles.primaryButton}
-            onPress={() => router.push('/exploracion')}
+            onPress={() => router.replace('/exploracion')}
             activeOpacity={0.85}
           >
             <Text style={styles.primaryButtonText}>Volver al inicio</Text>

@@ -144,13 +144,13 @@
 | 3C.1 | 📱 `payments.tsx` | Pestaña **Cheque**, completás: Banco `"Galicia"`, Nro `"00012345"`, Monto `100000` | Formulario válido |
 | 3C.2 | 📱 | Tocás **"Agregar"** | POST `/mediosPago/cheque` → 201 → `ChequeCertificadoResponse {montoCheque: 100000, montoDisponibleCheque: 100000}` |
 
-### 3D. Verificar medios de pago (operación de empleado)
+### 3D. Verificar medios de pago (operación de empleado vía admin)
 
 | Paso | 📱/🔧 | Acción | Resultado esperado |
 |------|-------|--------|--------------------|
 | 3D.1 | 🔧 `GET /mediosPago?cliente_id={id}` | Con el id del cliente | Lista de medios con estado="pendiente" |
-| 3D.2 | 🔧 `PUT /mediosPago/{medioId}/estado?estado=verificado` | Con el id del medio de pago | 200 → estado cambia a "verificado" |
-| 3D.3 | 🔧 `PUT /mediosPago/{medioId}/estado?estado=rechazado` | Estado inválido como `"aprobado"` | ❌ 422 |
+| 3D.2 | 🔧 `PUT /admin/medios-pago/{medioId}/estado?estado=verificado` | Con el id del medio de pago | 200 → estado cambia a "verificado" |
+| 3D.3 | 🔧 `PUT /admin/medios-pago/{medioId}/estado?estado=aprobado` | Estado inválido | ❌ 422 |
 | 3D.4 | 📱 `exploracion/subasta-vivo.tsx` | Usuario con al menos un medio verificado intenta pujar | ✅ Puede pujar |
 | 3D.5 | 📱 `exploracion/subasta-vivo.tsx` | Usuario sin medios verificados intenta pujar | ❌ 403 "Necesitás al menos un medio de pago verificado para pujar" |
 
@@ -279,11 +279,11 @@
 
 | Paso | 📱/🔧 | Acción | Resultado esperado |
 |------|-------|--------|--------------------|
-| 6B.1 | 📱 `delivery-details.tsx` | Pantalla carga | GET `/subasta/{sid}/{cid}/compras/precio` (precio sin envío) + GET `/clientes/{cid}/perfil` (dirección real) |
+| 6B.1 | 📱 `delivery-details.tsx` | Pantalla carga | GET `/subasta/{sid}/{cid}/compras/precio` (precio sin envío) + GET `/clientes/{cid}/perfil` (dirección real) + GET `/config/costo_envio_domicilio` (costo de envío) |
 | 6B.2 | 📱 | Dirección mostrada en "Envío a domicilio" | La dirección declarada en el registro (Persona.direccion), no hardcodeada |
-| 6B.3 | 📱 | Seleccionás **"Envío a domicilio"** | Resumen muestra: precioFinal + comisión + costo_envio (5.000) = total |
+| 6B.3 | 📱 | Seleccionás **"Envío a domicilio"** | Resumen muestra: precioFinal + comisión + costo_envio (5.000) = total — el valor viene de config, no muestra $0 aunque el RegistroSubasta no tenga envío guardado aún |
 | 6B.4 | 📱 | Seleccionás **"Retiro personal"** | Advertencia en rojo "pierde cobertura del seguro" — total = precioFinal + comisión (sin envío) |
-| 6B.5 | 📱 | Tocás **"Continuar al pago"** | POST `/subasta/{sid}/{cid}/compras/envio?metodoEnvio=domicilio` → en DB: costo_envio=5000 en RegistroSubasta |
+| 6B.5 | 📱 | Tocás **"Continuar al pago"** | POST `/subasta/{sid}/{cid}/compras/envio?metodoEnvio=domicilio` — si el back devuelve error, muestra Alert con el detalle; si es exitoso navega a `confirm-payment.tsx` |
 
 ### 6C. Confirmación de pago
 
@@ -305,12 +305,13 @@
 | 6D.3 | 📱 | Subasta en USD con tarjeta no internacional | ❌ 422 "Para subastas en USD se requiere una tarjeta internacional." |
 | 6D.4 | 📱 | Subasta en USD con cheque certificado | ❌ 422 "Los cheques certificados no pueden usarse en subastas en USD." |
 | 6D.5 | 📱 | Sin compras pendientes (ya pagadas) | ❌ 409 "No hay compras pendientes de pago en esta subasta" |
+| 6D.6 | 📱 | Confirmás el pago dos veces (doble tap o back + retry) | ❌ 409 "El pago ya fue registrado con este medio de pago." — no se genera estado duplicado |
 
 ### 6E. Pago con cheque insuficiente → Multa inmediata
 
 | Paso | 📱/🔧 | Acción | Resultado esperado |
 |------|-------|--------|--------------------|
-| 6E.1 | 🔧 | Creás cheque con monto $10 (muy bajo), verificarlo con `PUT /mediosPago/{id}/estado?estado=verificado` | Cheque verificado con monto_disponible=$10 |
+| 6E.1 | 🔧 | Creás cheque con monto $10 (muy bajo), verificarlo con `PUT /admin/medios-pago/{id}/estado?estado=verificado` | Cheque verificado con monto_disponible=$10 |
 | 6E.2 | 📱 | Usuario intenta pagar una compra de $151.500 con ese cheque | POST `/compras/pagar` → back detecta monto_disponible ($10) < total ($151.500) |
 | 6E.3 | 📱 | Resultado | ❌ 422 "Tu cheque no tiene saldo suficiente. Se generó una multa del 10%..." — en DB: Multa creada con monto=15.150 (10% de $151.500), fecha_limite=+72hs |
 | 6E.4 | 📧 | Email de multa recibido | Email rojo con monto multa, importe original, deadline, link de pago |
@@ -342,7 +343,7 @@
 | 7B.3 | 📧 | Email de multa recibido | Email rojo con monto multa, deadline, link de pago multa |
 | 7B.4 | 📱 | Usuario intenta unirse a otra subasta | ❌ 403 "Tenés una multa pendiente" |
 
-### 7C. Gestión de multas
+### 7C. Gestión de multas (confirmación por admin)
 
 | Paso | 📱/🔧 | Acción | Resultado esperado |
 |------|-------|--------|--------------------|
@@ -350,6 +351,15 @@
 | 7C.2 | 🔧 `POST /admin/multas/{multaId}/confirmar-pago` | ID de multa | 200 "Multa #X marcada como pagada. El usuario puede participar..." — DB: Multa.pagado="si" |
 | 7C.3 | 📱 `perfil/index.tsx` | Tras marcar multa como pagada | El botón de multas desaparece del perfil (0 multas pendientes) |
 | 7C.4 | 📱 | Usuario intenta registrarse en subasta nuevamente | ✅ 200 — puede participar |
+
+### 7D. Procesar pagos vencidos masivamente
+
+| Paso | 📱/🔧 | Acción | Resultado esperado |
+|------|-------|--------|--------------------|
+| 7D.1 | 🔧 `POST /admin/pagos/procesar-vencidos` | Sin params | Recorre todos los RegistroSubasta con `pagado in ("no","pendiente")` y `fecha_limite_pago < ahora` → los marca `pagado="vencido"` y genera una Multa por cada uno |
+| 7D.2 | 🔧 | Verificación en DB | Registros marcados "vencido"; Multas creadas con `fecha_limite = ahora + 72hs` (no igual a `ahora`) |
+| 7D.3 | 📱 | Los usuarios afectados intentan registrarse en subasta | ❌ 403 "Tenés una multa pendiente de pago" |
+| 7D.4 | 🔧 | Volvés a llamar al endpoint cuando no hay vencidos | 200 — no genera errores ni multas duplicadas |
 
 ---
 
@@ -409,7 +419,7 @@
 ## Flujo 9 — Perfil y Estadísticas
 
 **Archivos back:** `routers/personas.py` → `ep_get_perfil()` · `routers/vender.py` → `get_estadisticas_cliente()` · `routers/compras.py` → `ep_get_multas()`
-**Archivos front:** `app/perfil/index.tsx`, `app/perfil/estadisticas.tsx`
+**Archivos front:** `app/perfil/index.tsx`, `app/perfil/estadisticas.tsx`, `app/perfil/multas.tsx`
 
 ### 9A. Pantalla de perfil
 
@@ -417,9 +427,10 @@
 |------|-------|--------|--------------------|
 | 9A.1 | 📱 `perfil/index.tsx` | Abrís pestaña Perfil | GET `/clientes/{id}/perfil` → nombre, mail, dirección, categoría, admitido, numeroPais |
 | 9A.2 | 📱 | País | GET `/paises/{numeroPais}` → nombre del país ("Argentina") |
-| 9A.3 | 📱 | Sin multas | Botón "Multas pendientes" NO aparece |
-| 9A.4 | 📱 | Con multas | Botón "Multas pendientes (N)" visible en rojo |
-| 9A.5 | 📱 | Datos correctos | Nombre: "Usuario Prueba", Correo: "prueba@test.com", Categoría: "Común", País: "Argentina" |
+| 9A.3 | 📱 | Categoría mostrada | Usa el valor que devuelve la API (`perfilData.categoria`), no el dato de la sesión guardada al login — refleja cambios que el admin haya hecho |
+| 9A.4 | 📱 | Sin multas | Botón "Multas pendientes" NO aparece |
+| 9A.5 | 📱 | Con multas | Botón "Multas pendientes (N)" visible en rojo |
+| 9A.6 | 📱 | Datos correctos | Nombre: "Usuario Prueba", Correo: "prueba@test.com", Categoría: "Común", País: "Argentina" |
 
 ### 9B. Estadísticas
 
@@ -431,6 +442,21 @@
 | 9B.2 | 📱 `perfil/estadisticas.tsx` | Pantalla carga | GET `/clientes/{id}/estadisticas` → {subastasTotales, pujasGanadas, totalInvertido, historial} |
 | 9B.3 | 📱 | Datos mostrados | subastasTotales: 2 (dos subastas), pujasGanadas: 2 (1 en cada subasta), historial con los 5 items pujados |
 | 9B.4 | 📱 | Historial | Cada entrada: título del artículo, fecha, importe, ganada (sí/no) |
+
+### 9C. Multas pendientes del cliente
+
+> Precondición: el usuario tiene al menos una multa con `pagado="no"` (generada por 6E o 7B)
+
+| Paso | 📱/🔧 | Acción | Resultado esperado |
+|------|-------|--------|--------------------|
+| 9C.1 | 📱 `perfil/index.tsx` | Tocás **"Multas pendientes (N)"** | Navega a `/perfil/multas` |
+| 9C.2 | 📱 `perfil/multas.tsx` | Pantalla carga | GET `/multas/{clienteId}` → lista de multas pendientes: monto, fecha_limite, id de subasta |
+| 9C.3 | 📱 | Cada fila de multa | Muestra monto formateado, fecha límite, y botón **"Pagar multa"** |
+| 9C.4 | 📱 | Tocás **"Pagar multa"** | Alert de confirmación: "¿Querés pagar esta multa?" |
+| 9C.5 | 📱 | Confirmás en el Alert | POST `/multas/{multaId}/pagar?cliente_id={clienteId}` → Multa.pagado="si" — la multa desaparece de la lista |
+| 9C.6 | 📱 | Intentás pagar una multa que no te pertenece (vía Swagger) | ❌ 403 "Esta multa no pertenece al cliente indicado" |
+| 9C.7 | 📱 | Tras pagar todas las multas | Lista vacía — botón "Multas pendientes" desaparece del perfil al volver |
+| 9C.8 | 📱 | Usuario intenta registrarse en subasta tras pagar la multa | ✅ 200 — puede participar |
 
 ---
 
@@ -503,7 +529,7 @@
 ## Flujo 12 — Configuración de Empresa
 
 **Archivos back:** `routers/vender.py` → `ep_get_configuracion()`
-**Archivos front:** `app/vender/mis-articulos.tsx`, `app/vender/ubicacion-seguro.tsx`
+**Archivos front:** `app/vender/mis-articulos.tsx`, `app/vender/ubicacion-seguro.tsx`, `app/cierre-subasta/delivery-details.tsx`
 
 | Paso | 📱/🔧 | Acción | Resultado esperado |
 |------|-------|--------|--------------------|
@@ -541,6 +567,7 @@
 | M1 | Pago registrado como "pendiente" + email + deadline 72hs | `compras.py:confirmar_pago()` | `confirm-payment.tsx` | 6C |
 | M2 | Multa = 10% del importe pujado, al fallar el pago | `compras.py:confirmar_pago()`, `admin.py:ep_rechazar_pago()` | `perfil/index.tsx` | 6E, 7B |
 | M3 | Multa pendiente bloquea participación en subastas | `subastas.py:find_or_create_asistente()` | `subasta-vivo.tsx` | 6E.5 |
+| M4 | Multa con fecha_limite = ahora + 72hs (no igual a ahora) | `admin.py:ep_procesar_vencidos()` | — | 7D.2 |
 | E1 | Incremento mínimo: precio_actual + 1% del precio base | `subastas.py:create_pujo()` | `subasta-vivo.tsx` (validación cliente) | 5C.1, 5D.1 |
 | E2 | Incremento máximo: precio_actual + 20% del precio base | `subastas.py:create_pujo()` | `subasta-vivo.tsx` (validación cliente) | 5D.2 |
 | E3 | Límites E1/E2 NO aplican a subastas oro/platino | `subastas.py:create_pujo()` | — | 5E |
@@ -576,7 +603,7 @@ Para verificar que el email funciona: correr flujo 6C con credenciales reales y 
 | Cierre/Pago | `routers/compras.py`, `app/email_service.py` | `app/cierre-subasta/winner.tsx`, `delivery-details.tsx`, `confirm-payment.tsx` |
 | Admin Pagos | `routers/admin.py`, `app/email_service.py` | Solo Swagger |
 | Vender | `routers/vender.py` | `app/vender/index.tsx`, `mis-articulos.tsx`, `articulo-aprobado.tsx`, `inspeccion-rechazada.tsx`, `ubicacion-seguro.tsx` |
-| Perfil | `routers/personas.py`, `routers/vender.py` | `app/perfil/index.tsx`, `app/perfil/estadisticas.tsx` |
-| Config | `routers/vender.py`, `scripts/seed.py` | `app/vender/mis-articulos.tsx` |
+| Perfil | `routers/personas.py`, `routers/vender.py` | `app/perfil/index.tsx`, `app/perfil/estadisticas.tsx`, `app/perfil/multas.tsx` |
+| Config | `routers/vender.py`, `scripts/seed.py` | `app/vender/mis-articulos.tsx`, `app/cierre-subasta/delivery-details.tsx` |
 | Países | `routers/lookup.py` | `app/register.tsx`, `app/payments.tsx`, `app/perfil/index.tsx` |
 | Dev Reset | `routers/dev.py` | Solo Swagger |

@@ -34,7 +34,15 @@ def get_home(db: Session, categoria: str) -> schemas.HomeResponse:
     def _en_vivo(subasta) -> bool:
         ahora = datetime.now()
         inicio = datetime.combine(subasta.fecha, subasta.hora)
-        return subasta.estado == "abierta" and inicio <= ahora
+        if subasta.estado != "abierta" or inicio > ahora:
+            return False
+        cat = db.query(models.Catalogo).filter(models.Catalogo.subasta == subasta.identificador).first()
+        if not cat:
+            return False
+        return db.query(models.ItemCatalogo).filter(
+            models.ItemCatalogo.catalogo == cat.identificador,
+            models.ItemCatalogo.subastado == "no",
+        ).count() > 0
 
     dest = subastas[0]
     postores = db.query(models.Asistente).filter(models.Asistente.subasta == dest.identificador).count()
@@ -49,9 +57,11 @@ def get_home(db: Session, categoria: str) -> schemas.HomeResponse:
     for h in historial:
         persona = db.query(models.Persona).filter(models.Persona.identificador == h.cliente).first()
         item = db.query(models.ItemCatalogo).filter(models.ItemCatalogo.identificador == h.itemCatalogo).first()
+        if not item:
+            continue
         pp = db.query(models.ProductoPresentacion).filter(
             models.ProductoPresentacion.producto == item.producto
-        ).first() if item else None
+        ).first()
         actividad.append(schemas.ActividadReciente(
             pujaId=h.identificador,
             nombreComprador=persona.nombre if persona else "Desconocido",

@@ -19,6 +19,11 @@ type ProductoCatalogo = {
   imagen: string | null;
 };
 
+type SubastaInfo = {
+  fecha: Date | null;
+  categoria: string | null;
+};
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function formatCurrency(amount: number): string {
@@ -33,6 +38,7 @@ export default function CatalogoScreen() {
 
   const [lots, setLots] = useState<ProductoCatalogo[]>([]);
   const [isEnVivo, setIsEnVivo] = useState(false);
+  const [subastaInfo, setSubastaInfo] = useState<SubastaInfo>({ fecha: null, categoria: null });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -44,9 +50,8 @@ export default function CatalogoScreen() {
     }
     setLoading(true);
     setError('');
-    setIsEnVivo(false); // resetear siempre al cargar
+    setIsEnVivo(false);
     try {
-      // Carga el catálogo y verifica enVivo en paralelo
       const [catalogoRes, homeRes] = await Promise.all([
         fetch(API_ENDPOINTS.catalogoSubasta(subastaId)),
         fetch(API_ENDPOINTS.home(SessionStore.getCategoria())),
@@ -60,7 +65,6 @@ export default function CatalogoScreen() {
       const json: ProductoCatalogo[] = await catalogoRes.json();
       setLots(json);
 
-      // Verificar enVivo desde el backend (fuente de verdad)
       if (homeRes.ok) {
         const homeData = await homeRes.json();
         const id = parseInt(subastaId, 10);
@@ -68,7 +72,10 @@ export default function CatalogoScreen() {
         const generales: any[] = homeData.subastasGenerales ?? [];
         const todas = [...(destacada ? [destacada] : []), ...generales];
         const match = todas.find((s) => s.subastaId === id);
-        setIsEnVivo(match?.enVivo === true);
+        if (match) {
+          setIsEnVivo(match.enVivo === true);
+          setSubastaInfo({ fecha: new Date(match.fecha), categoria: match.categoria });
+        }
       }
     } catch {
       setError('No se pudo cargar el catálogo. Verificá tu conexión.');
@@ -161,6 +168,34 @@ export default function CatalogoScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
+          {/* ── Información de la subasta ───────────────────────────── */}
+          {subastaInfo.fecha && (
+            <View style={styles.infoCard}>
+              <View style={styles.infoRow}>
+                <MaterialCommunityIcons name="calendar-outline" size={16} color="#8A6D3B" />
+                <Text style={styles.infoText}>
+                  {subastaInfo.fecha.toLocaleDateString('es-AR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                </Text>
+              </View>
+              <View style={styles.infoRow}>
+                <MaterialCommunityIcons name="clock-outline" size={16} color="#8A6D3B" />
+                <Text style={styles.infoText}>
+                  {subastaInfo.fecha.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })} hs
+                </Text>
+              </View>
+              <View style={styles.infoRow}>
+                <MaterialCommunityIcons name="package-variant-closed" size={16} color="#8A6D3B" />
+                <Text style={styles.infoText}>{lots.length} {lots.length === 1 ? 'ítem' : 'ítems'} en catálogo</Text>
+              </View>
+              {subastaInfo.categoria && (
+                <View style={styles.infoRow}>
+                  <MaterialCommunityIcons name="star-outline" size={16} color="#8A6D3B" />
+                  <Text style={styles.infoText}>Categoría: {subastaInfo.categoria.charAt(0).toUpperCase() + subastaInfo.categoria.slice(1)}</Text>
+                </View>
+              )}
+            </View>
+          )}
+
           {/* ── Botón En Vivo ───────────────────────────────────────── */}
           {isEnVivo && (
             <TouchableOpacity
@@ -185,10 +220,7 @@ export default function CatalogoScreen() {
         </ScrollView>
       )}
 
-      <BottomTabBar
-        activeTab="explorar"
-        onTabPress={(tab) => router.push(`/${tab}` as any)}
-      />
+      <BottomTabBar activeTab="explorar" />
     </SafeAreaView>
   );
 }
@@ -335,6 +367,27 @@ const styles = StyleSheet.create({
     backgroundColor: '#F0F0F0',
     marginTop: 24,
     marginHorizontal: -20,
+  },
+
+  // ── Info Card ──
+  infoCard: {
+    backgroundColor: '#FFF8E1',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#FFE082',
+    padding: 16,
+    marginBottom: 16,
+    gap: 8,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  infoText: {
+    fontSize: 13,
+    color: '#614F3A',
+    flex: 1,
   },
 
   // ── Botón En Vivo ──

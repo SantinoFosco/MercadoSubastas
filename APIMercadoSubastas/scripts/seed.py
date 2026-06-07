@@ -7,6 +7,7 @@ Uso (desde la raíz del proyecto APIMercadoSubastas/):
 """
 import sys
 import os
+import base64
 
 # Permite importar el paquete app desde la raíz del proyecto
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -15,6 +16,22 @@ from datetime import date, time, timedelta
 from passlib.context import CryptContext
 from app import models
 from app.database import SessionLocal
+
+# Minimal 1x1 white JPEG used as placeholder photo for seeded products
+_FOTO_BYTES = base64.b64decode(
+    "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgMCAgMDAwMEAwMEBQgFBQQEBQoH"
+    "BwYIDAoMCwsKCwsNCxAQDQ4RDgsLEBYQERMUFRUVDA8XGBYUGBIUFRT/2wBDAQME"
+    "BAUEBQkFBQkUDQsNFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQU"
+    "FBQUFBQUFBT/wAARCAABAAEDASIAAhEBAxEB/8QAFAABAAAAAAAAAAAAAAAAAAAACf/"
+    "EABQQAQAAAAAAAAAAAAAAAAAAAAD/xAAUAQEAAAAAAAAAAAAAAAAAAAAA/8QAFBEBAAAA"
+    "AAAAAAAAAAAAAAAAAP/aAAwDAQACEQMRAD8AJQAB/9k="
+)
+
+
+def _add_foto(db, producto_id: int) -> None:
+    """Adds a placeholder JPEG photo for a product if none exists."""
+    if not db.query(models.Foto).filter(models.Foto.producto == producto_id).first():
+        db.add(models.Foto(producto=producto_id, foto=_FOTO_BYTES))
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -104,7 +121,7 @@ def seed_subastas():
             db.add(a)
         db.flush()
 
-        # Presentaciones
+        # Presentaciones y fotos
         datos_pp = [
             ("Reloj de Bolsillo Suizo — Siglo XIX",       "Relojes y Joyería", "Suiza"),
             ("Jarrón de Porcelana China — Dinastía Ming",  "Arte Oriental",     "China"),
@@ -117,6 +134,7 @@ def seed_subastas():
                 producto=articulo.identificador, titulo=titulo, categoria=cat,
                 procedencia=procedencia, declaracionLegal="si", estado="publicado",
             ))
+            db.add(models.Foto(producto=articulo.identificador, foto=_FOTO_BYTES))
         db.flush()
 
         # Subastas
@@ -311,6 +329,7 @@ def seed_subastas_categorias():
                         producto=producto.identificador, titulo=desc_corta, categoria=cat_pp,
                         procedencia=procedencia, declaracionLegal="si", estado="publicado",
                     ))
+                    db.add(models.Foto(producto=producto.identificador, foto=_FOTO_BYTES))
                     db.add(models.ItemCatalogo(
                         catalogo=catalogo.identificador, producto=producto.identificador,
                         precioBase=precio, comision=comision, subastado="no",
@@ -643,6 +662,7 @@ def seed_subasta_usd():
             categoria="Numismática", procedencia="Estados Unidos",
             declaracionLegal="si", estado="publicado",
         ))
+        db.add(models.Foto(producto=producto.identificador, foto=_FOTO_BYTES))
         item = models.ItemCatalogo(
             catalogo=catalogo.identificador, producto=producto.identificador,
             precioBase=1800, comision=5, subastado="no",

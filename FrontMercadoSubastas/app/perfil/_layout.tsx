@@ -5,6 +5,8 @@ export default function PerfilLayout() {
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="index" />
       <Stack.Screen name="estadisticas" />
+      <Stack.Screen name="medios-pago" />
+      <Stack.Screen name="multas" />
     </Stack>
   );
 }

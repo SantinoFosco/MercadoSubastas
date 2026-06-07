@@ -1,15 +1,23 @@
 # ==========================================
+#   PYTHON — COMPILADOS (global, cualquier subcarpeta)
+# ==========================================
+__pycache__/
+*.py[cod]
+*.pyo
+
+# ==========================================
 #   PYTHON / FASTAPI (APIMercadoSubastas)
 # ==========================================
 APIMercadoSubastas/venv/
 APIMercadoSubastas/.venv/
-APIMercadoSubastas/**/__pycache__/
 APIMercadoSubastas/.env
-APIMercadoSubastas/**/*.pyc
-APIMercadoSubastas/**/*.pyo
 APIMercadoSubastas/*.egg-info/
 APIMercadoSubastas/dist/
 APIMercadoSubastas/.pytest_cache/
+APIMercadoSubastas/.mypy_cache/
+APIMercadoSubastas/.ruff_cache/
+APIMercadoSubastas/htmlcov/
+APIMercadoSubastas/*.db
 
 # ==========================================
 #   NODE / EXPO (FrontMercadoSubastas)
@@ -26,8 +34,9 @@ FrontMercadoSubastas/.metro-health-check*
 FrontMercadoSubastas/npm-debug.*
 FrontMercadoSubastas/yarn-debug.*
 FrontMercadoSubastas/yarn-error.*
+FrontMercadoSubastas/.cache/
 
-# Carpetas nativas generadas por Expo (no se usan en este proyecto)
+# Carpetas nativas generadas por Expo (no se usan en Expo Go)
 FrontMercadoSubastas/ios/
 FrontMercadoSubastas/android/
 FrontMercadoSubastas/.kotlin/
@@ -44,9 +53,7 @@ FrontMercadoSubastas/*.pem
 #   DOCKER
 # ==========================================
 .env
-
-# Carpeta anterior del front (renombrada a FrontMercadoSubastas)
-Mercado-Subastas/
+docker-compose.override.yml
 
 # ==========================================
 #   SISTEMA OPERATIVO
@@ -63,3 +70,8 @@ desktop.ini
 *.swp
 *.swo
 .claude/
+
+# ==========================================
+#   LOGS
+# ==========================================
+*.log
