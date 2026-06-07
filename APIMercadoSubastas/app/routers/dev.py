@@ -60,5 +60,9 @@ def reset_subasta(subasta_id: int, db: Session = Depends(get_db)):
     db.query(models.RegistroSubasta).filter(models.RegistroSubasta.subasta == subasta_id).delete()
     db.query(models.Multa).filter(models.Multa.subasta == subasta_id).delete()
     db.query(models.Asistente).filter(models.Asistente.subasta == subasta_id).delete()
+    # Restaurar estado "abierta" para que vuelva a aparecer en home
+    subasta = db.query(models.Subasta).filter(models.Subasta.identificador == subasta_id).first()
+    if subasta:
+        subasta.estado = "abierta"
     db.commit()
     return {"mensaje": f"Subasta {subasta_id} reseteada para testing"}

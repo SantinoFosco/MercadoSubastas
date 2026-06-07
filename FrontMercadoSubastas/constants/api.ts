@@ -71,6 +71,7 @@ export const API_ENDPOINTS = {
   adminMultasPendientes:   `${API_BASE_URL}/admin/multas/pendientes`,
   adminConfirmarMulta:     (id: number | string) => `${API_BASE_URL}/admin/multas/${id}/confirmar-pago`,
   adminProcesarVencidos:   `${API_BASE_URL}/admin/pagos/procesar-vencidos`,
+  adminMediosPagoPendientes: `${API_BASE_URL}/admin/medios-pago/pendientes`,
   adminVerificarMedioPago: (id: number | string, estado: string) =>
                              `${API_BASE_URL}/admin/medios-pago/${id}/estado?estado=${estado}`,
 };

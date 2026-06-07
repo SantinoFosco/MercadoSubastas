@@ -336,6 +336,32 @@ def ep_procesar_vencidos(db: Session = Depends(get_db)):
     }
 
 
+@router.get("/medios-pago/pendientes")
+def ep_medios_pago_pendientes(db: Session = Depends(get_db)):
+    """Lista todos los medios de pago pendientes de verificación admin."""
+    medios = db.query(models.MedioPago).filter(models.MedioPago.estado == "pendiente").all()
+    result = []
+    for medio in medios:
+        persona = db.query(models.Persona).filter(
+            models.Persona.identificador == medio.cliente
+        ).first()
+        detalle = db.query(models.PersonaDetalle).filter(
+            models.PersonaDetalle.persona == medio.cliente
+        ).first()
+        result.append({
+            "id": medio.identificador,
+            "tipo": medio.tipo,
+            "estado": medio.estado,
+            "clienteId": medio.cliente,
+            "nombreCliente": persona.nombre if persona else "—",
+            "mailCliente": detalle.mail if detalle else "—",
+            "descripcion": medio.descripcion,
+            "moneda": medio.moneda,
+            "esInternacional": medio.es_internacional == "si",
+        })
+    return result
+
+
 @router.put("/medios-pago/{medio_pago_id}/estado")
 def ep_admin_update_estado_medio_pago(
     medio_pago_id: int,

@@ -33,11 +33,12 @@ export type SoldInfo = {
 };
 
 type WsMessage =
-  | { type: 'auction_state'; data: AuctionState }
-  | { type: 'bid_update';    data: AuctionState }
-  | { type: 'item_closed';   data: SoldInfo }
-  | { type: 'auction_ended'; data: { subastaId: number } }
-  | { type: 'error';         detail: string };
+  | { type: 'auction_state';       data: AuctionState }
+  | { type: 'bid_update';          data: AuctionState }
+  | { type: 'item_closed';         data: SoldInfo }
+  | { type: 'auction_ended';       data: { subastaId: number } }
+  | { type: 'auction_not_started'; data: { subastaId: number; inicio: string } }
+  | { type: 'error';               detail: string };
 
 const MAX_RETRIES = 5;
 const RETRY_BASE_MS = 1500;
@@ -46,6 +47,8 @@ export function useAuctionWebSocket(subastaId: string | null, clienteId: number 
   const [auctionState, setAuctionState] = useState<AuctionState | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [auctionEnded, setAuctionEnded] = useState(false);
+  const [auctionNotStarted, setAuctionNotStarted] = useState(false);
+  const [auctionStartTime, setAuctionStartTime] = useState<string | null>(null);
   const [soldInfo, setSoldInfo] = useState<SoldInfo | null>(null);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -91,6 +94,9 @@ export function useAuctionWebSocket(subastaId: string | null, clienteId: number 
         } else if (msg.type === 'auction_ended') {
           auctionEndedRef.current = true;
           setAuctionEnded(true);
+        } else if (msg.type === 'auction_not_started') {
+          setAuctionNotStarted(true);
+          setAuctionStartTime(msg.data.inicio);
         } else if (msg.type === 'error') {
           setConnectionError(msg.detail);
         }
@@ -109,5 +115,5 @@ export function useAuctionWebSocket(subastaId: string | null, clienteId: number 
     };
   }, [connect]);
 
-  return { auctionState, isConnected, auctionEnded, soldInfo, connectionError };
+  return { auctionState, isConnected, auctionEnded, auctionNotStarted, auctionStartTime, soldInfo, connectionError };
 }

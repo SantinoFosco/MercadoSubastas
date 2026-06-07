@@ -1,6 +1,6 @@
 ﻿import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useRouter, useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Appbar, Text } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -57,37 +57,38 @@ export default function MisArticulosScreen() {
   const [activeFilter, setActiveFilter] = useState<FilterTab>('todos');
   const [direccionInspeccion, setDireccionInspeccion] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function fetchArticles() {
-      if (!session) { router.replace('/login'); return; }
-      try {
-        const res = await fetch(API_ENDPOINTS.misArticulos(session.identificador));
-        if (!res.ok) throw new Error();
-        const data = await res.json();
-        const mapped: Article[] = data.map((item: any) => ({
-          productoId: item.productoId,
-          titulo: item.titulo,
-          categoria: item.categoria,
-          estadoInspeccion: resolveStatus(item),
-          observaciones: item.observaciones ?? null,
-          costoDevolucion: item.costoDevolucion ?? null,
-          enSubasta: item.enSubasta,
-        }));
-        setArticles(mapped);
-        if (mapped.some((a) => a.estadoInspeccion === 'pendiente')) {
-          fetch(API_ENDPOINTS.configEmpresa('direccion_inspeccion'))
-            .then((r) => r.ok ? r.json() : null)
-            .then((d) => d && setDireccionInspeccion(d.valor))
-            .catch(() => {});
-        }
-      } catch {
-        setError('No se pudieron cargar los artículos.');
-      } finally {
-        setLoading(false);
+  const fetchArticles = useCallback(async () => {
+    if (!session) { router.replace('/login'); return; }
+    setLoading(true);
+    setError('');
+    try {
+      const res = await fetch(API_ENDPOINTS.misArticulos(session.identificador));
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      const mapped: Article[] = data.map((item: any) => ({
+        productoId: item.productoId,
+        titulo: item.titulo,
+        categoria: item.categoria,
+        estadoInspeccion: resolveStatus(item),
+        observaciones: item.observaciones ?? null,
+        costoDevolucion: item.costoDevolucion ?? null,
+        enSubasta: item.enSubasta,
+      }));
+      setArticles(mapped);
+      if (mapped.some((a) => a.estadoInspeccion === 'pendiente')) {
+        fetch(API_ENDPOINTS.configEmpresa('direccion_inspeccion'))
+          .then((r) => r.ok ? r.json() : null)
+          .then((d) => d && setDireccionInspeccion(d.valor))
+          .catch(() => {});
       }
+    } catch {
+      setError('No se pudieron cargar los artículos.');
+    } finally {
+      setLoading(false);
     }
-    fetchArticles();
   }, [session]);
+
+  useFocusEffect(useCallback(() => { fetchArticles(); }, [fetchArticles]));
 
   const filtered = articles.filter((a) => {
     if (activeFilter === 'aprobados') return a.estadoInspeccion === 'aprobado' || a.estadoInspeccion === 'en_venta';

@@ -202,13 +202,16 @@ export default function ExploracionScreen() {
                   )}
 
                   <Text style={styles.liveCardLotInfo}>
-                    {(() => {
-                      const d = new Date(destacada.fecha);
-                      const now = new Date();
-                      const diffDays = Math.floor((d.getTime() - now.getTime()) / 86400000);
-                      const label = diffDays === 0 ? 'HOY' : diffDays === -1 ? 'AYER' : d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' });
-                      return `SUBASTA #${destacada.subastaId} · ${label} ${formatTime(destacada.fecha)}${destacada.enVivo ? ' · EN VIVO' : ''}`;
-                    })()}
+                    {destacada.enVivo
+                      ? `SUBASTA #${destacada.subastaId} · EN CURSO`
+                      : (() => {
+                          const d = new Date(destacada.fecha);
+                          const now = new Date();
+                          const diffDays = Math.floor((d.getTime() - now.getTime()) / 86400000);
+                          const label = diffDays === 0 ? 'HOY' : diffDays === -1 ? 'AYER' : d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' });
+                          return `SUBASTA #${destacada.subastaId} · ${label} ${formatTime(destacada.fecha)}`;
+                        })()
+                    }
                   </Text>
 
                   <Text style={styles.liveCardTitle}>

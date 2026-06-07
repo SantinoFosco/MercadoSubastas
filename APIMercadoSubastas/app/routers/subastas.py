@@ -1,7 +1,7 @@
 import asyncio
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
 from sqlalchemy import func
@@ -14,6 +14,9 @@ from ..utils import get_foto_b64, CATEGORIA_ORDER
 
 router = APIRouter(tags=["Subastas"])
 AUCTION_ITEM_TIMEOUT = int(os.getenv("AUCTION_ITEM_TIMEOUT", "30"))
+
+# Offset fijo UTC-3 (Argentina, sin DST). Igual que en catalogo.py.
+_AR_TZ = timezone(timedelta(hours=-3))
 
 # Timers activos por item_catalogo_id (compartido con dev.py para poder cancelarlos)
 _item_timers: dict[int, asyncio.Task] = {}
@@ -173,6 +176,13 @@ def get_subasta_en_vivo(db: Session, subasta_id: int):
     subasta = db.query(models.Subasta).filter(models.Subasta.identificador == subasta_id).first()
     if not subasta:
         return None
+
+    # Barrera temporal: la subasta solo existe como "en vivo" si ya arrancó en hora Argentina.
+    ahora_ar = datetime.now(tz=_AR_TZ).replace(tzinfo=None)
+    inicio = datetime.combine(subasta.fecha, subasta.hora)
+    if subasta.estado != "abierta" or inicio > ahora_ar:
+        return None
+
     catalogo = db.query(models.Catalogo).filter(models.Catalogo.subasta == subasta_id).first()
     if not catalogo:
         return None
@@ -511,9 +521,21 @@ async def ws_subasta(
                 subasta_obj = db.query(models.Subasta).filter(models.Subasta.identificador == subasta_id).first()
                 if subasta_obj:
                     subasta_dt = datetime.combine(subasta_obj.fecha, subasta_obj.hora)
-                    if datetime.now() >= subasta_dt:
+                    ahora_ar = datetime.now(tz=_AR_TZ).replace(tzinfo=None)
+                    if ahora_ar >= subasta_dt:
                         _item_timers[item_id] = asyncio.create_task(_cerrar_item(item_id, subasta_id))
         else:
+            # Distinguir entre "aún no arrancó" y "ya terminó" para dar feedback correcto al cliente.
+            subasta_obj = db.query(models.Subasta).filter(models.Subasta.identificador == subasta_id).first()
+            if subasta_obj:
+                ahora_ar = datetime.now(tz=_AR_TZ).replace(tzinfo=None)
+                inicio = datetime.combine(subasta_obj.fecha, subasta_obj.hora)
+                if subasta_obj.estado == "abierta" and inicio > ahora_ar:
+                    await websocket.send_text(json.dumps({
+                        "type": "auction_not_started",
+                        "data": {"subastaId": subasta_id, "inicio": inicio.isoformat()},
+                    }))
+                    return
             await websocket.send_text(json.dumps({"type": "auction_ended", "data": {"subastaId": subasta_id}}))
         while True:
             await websocket.receive_text()

@@ -86,7 +86,7 @@ export default function SubastaVivoScreen() {
   }, [clienteId]);
 
   // ── WebSocket — estado en tiempo real ───────────────────────────────────────
-  const { auctionState, isConnected, auctionEnded, soldInfo, connectionError } =
+  const { auctionState, isConnected, auctionEnded, auctionNotStarted, auctionStartTime, soldInfo, connectionError } =
     useAuctionWebSocket(subastaId ?? null, clienteId);
 
   // Rastrear si el usuario ganó al menos un ítem (para redirigir al cierre)
@@ -202,6 +202,24 @@ export default function SubastaVivoScreen() {
 
   // Guard: no renderizar nada si no hay sesión (el useEffect ya redirige)
   if (!session?.identificador) return null;
+
+  // ── Estado: subasta aún no arrancó ─────────────────────────────────────────
+  if (auctionNotStarted) {
+    const hora = auctionStartTime
+      ? new Date(auctionStartTime).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
+      : null;
+    return (
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
+        <View style={styles.endedContainer}>
+          <MaterialCommunityIcons name="clock-outline" size={64} color="#8A6D3B" />
+          <Text style={styles.endedTitle}>La subasta aún no comenzó</Text>
+          {hora && <Text style={styles.endedSubtitle}>Horario de inicio: {hora} hs</Text>}
+          <Text style={styles.endedSubtitle}>Volvé a esta pantalla cuando llegue la hora.</Text>
+        </View>
+        <BottomTabBar activeTab="explorar" />
+      </SafeAreaView>
+    );
+  }
 
   // ── Estado: subasta finalizada (solo para quienes no ganaron nada) ──────────
   if (auctionEnded && !hasWon) {

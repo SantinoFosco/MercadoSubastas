@@ -5,10 +5,12 @@ import { ScrollView, StyleSheet, View, Image, Alert, ActivityIndicator } from 'r
 import { Appbar, Button, Text, TextInput } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { API_ENDPOINTS } from '../constants/api';
+import { useSession } from '@/contexts/SessionContext';
 
 export default function PasswordSetupScreen() {
   const router = useRouter();
   const { mail, clienteId } = useLocalSearchParams<{ mail: string; clienteId: string }>();
+  const { login } = useSession();
 
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -40,22 +42,37 @@ export default function PasswordSetupScreen() {
 
     setIsLoading(true);
     try {
-      const response = await fetch(API_ENDPOINTS.cambiarClave, {
+      const cambioRes = await fetch(API_ENDPOINTS.cambiarClave, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mail, contrasenia: password }),
       });
 
-      const data = await response.json();
+      const cambioData = await cambioRes.json();
 
-      if (response.status === 404) {
+      if (cambioRes.status === 404) {
         setError('No se encontró el usuario. Volvé al inicio del registro.');
         return;
       }
 
-      if (!response.ok) {
-        setError(data.detail ?? 'Ocurrió un error. Intenta nuevamente.');
+      if (!cambioRes.ok) {
+        setError(cambioData.detail ?? 'Ocurrió un error. Intenta nuevamente.');
         return;
+      }
+
+      // Auto-login: la cuenta ya fue aprobada por el admin y la clave está establecida.
+      try {
+        const loginRes = await fetch(API_ENDPOINTS.login, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mail, contrasenia: password }),
+        });
+        if (loginRes.ok) {
+          const userData = await loginRes.json();
+          await login(userData);
+        }
+      } catch {
+        // Si el auto-login falla, el usuario puede iniciar sesión manualmente.
       }
 
       router.push({ pathname: '/payments', params: { clienteId } });

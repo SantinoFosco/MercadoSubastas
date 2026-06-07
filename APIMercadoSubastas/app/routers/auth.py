@@ -1,5 +1,6 @@
 import base64
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext
 from .. import models, schemas
@@ -46,6 +47,9 @@ def iniciar_registro(db: Session, request: schemas.RegistroIniciarRequest):
         db.commit()
         db.refresh(nueva_persona)
         return schemas.RegistroIniciarResponse(mensaje="Registro iniciado exitosamente", personaId=nueva_persona.identificador)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="El mail o documento ya está registrado")
     except Exception as e:
         db.rollback()
         raise e
