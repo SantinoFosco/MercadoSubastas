@@ -235,7 +235,10 @@ def ep_actualizar_inspeccion(
 ):
     """
     Aprueba o rechaza un artículo enviado por un usuario.
-    - Al aprobar: requiere subastaId, precioBase y comision para asignarlo al catálogo.
+    - Al aprobar: requiere subastaId, precioBase y comision. Estas condiciones
+      quedan PROPUESTAS para que el dueño las acepte o rechace; el artículo
+      recién se incorpora al catálogo de la subasta cuando el dueño las acepta
+      mediante POST /articulos/{producto_id}/aceptar (no en este endpoint).
     - Al rechazar: requiere costo_devolucion.
     """
     estados_validos = {"aprobado", "rechazado"}
@@ -273,22 +276,23 @@ def ep_actualizar_inspeccion(
         if ya_en_catalogo:
             raise HTTPException(status_code=409, detail="El artículo ya está asignado a esa subasta")
 
-        db.add(models.ItemCatalogo(
-            catalogo=catalogo.identificador,
-            producto=producto_id,
-            precioBase=request.precioBase,
-            comision=request.comision,
-            subastado="no",
-        ))
-
+        # No insertamos el ItemCatalogo todavía: solo registramos las
+        # condiciones PROPUESTAS. El artículo se incorpora al catálogo recién
+        # cuando el dueño las acepta vía POST /articulos/{producto_id}/aceptar.
         aceptacion = db.query(models.AceptacionArticulo).filter(
             models.AceptacionArticulo.producto == producto_id
         ).first()
         if not aceptacion:
-            db.add(models.AceptacionArticulo(producto=producto_id, estado="pendiente"))
+            aceptacion = models.AceptacionArticulo(producto=producto_id)
+            db.add(aceptacion)
+        aceptacion.estado = "pendiente"
+        aceptacion.fecha = None
+        aceptacion.subastaPropuesta = request.subastaId
+        aceptacion.precioBasePropuesto = request.precioBase
+        aceptacion.comisionPropuesta = request.comision
 
     db.commit()
-    accion = "aprobado y asignado a la subasta" if request.estado == "aprobado" else "rechazado"
+    accion = "aprobado: condiciones propuestas al dueño" if request.estado == "aprobado" else "rechazado"
     return schemas.MensajeResponse(mensaje=f"Artículo #{producto_id} {accion} correctamente.")
 
 

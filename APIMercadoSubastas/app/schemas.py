@@ -69,6 +69,12 @@ class MedioPagoItem(BaseModel):
     esInternacional: bool
     montoCheque: Optional[Decimal] = None
     montoDisponibleCheque: Optional[Decimal] = None
+    # Solo se completan cuando se listan medios de pago de TODOS los clientes
+    # (p. ej. GET /mediosPago sin cliente_id, para revisión administrativa);
+    # en la consulta por cliente quedan en None.
+    clienteId: Optional[int] = None
+    nombreCliente: Optional[str] = None
+    mailCliente: Optional[str] = None
 
 class MedioPagoListResponse(BaseModel):
     tieneMedioPagoVerificado: bool

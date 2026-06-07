@@ -348,6 +348,12 @@ class AceptacionArticulo(Base):
     producto = Column(Integer, ForeignKey("productos.identificador"), nullable=False, unique=True)
     estado = Column(String, nullable=False, server_default="pendiente")
     fecha = Column(DateTime(timezone=True), nullable=True)
+    # Condiciones propuestas por la empresa (registradas al aprobar el artículo)
+    # que el dueño debe aceptar antes de que el producto se incorpore
+    # efectivamente al catálogo de la subasta (ver POST /articulos/{id}/aceptar)
+    subastaPropuesta = Column(Integer, ForeignKey("subastas.identificador"), nullable=True)
+    precioBasePropuesto = Column(Numeric(precision=18, scale=2), nullable=True)
+    comisionPropuesta = Column(Numeric(precision=18, scale=2), nullable=True)
 
     __table_args__ = (
         CheckConstraint("estado IN ('pendiente', 'aceptado', 'rechazado')", name="chkEstadoAceptacion"),

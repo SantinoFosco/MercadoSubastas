@@ -1,3 +1,4 @@
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from .. import models, schemas
@@ -33,6 +34,36 @@ def get_medios_pago_cliente(db: Session, cliente_id: int) -> schemas.MedioPagoLi
     items = [_build_medio_pago_item(m, db) for m in medios]
     return schemas.MedioPagoListResponse(
         tieneMedioPagoVerificado=any(i.estado == "verificado" for i in items),
+        medios=items,
+    )
+
+
+def get_medios_pago_pendientes(db: Session) -> schemas.MedioPagoListResponse:
+    """
+    Lista TODOS los medios de pago con estado='pendiente' (de cualquier
+    cliente), indicando a qué usuario pertenece cada uno. Pensado para que
+    un administrador pueda revisar/aprobar medios de pago sin tener que
+    consultarlos cliente por cliente (cliente_id por cliente_id).
+    """
+    medios = db.query(models.MedioPago).filter(models.MedioPago.estado == "pendiente").all()
+
+    items: list[schemas.MedioPagoItem] = []
+    for medio in medios:
+        item = _build_medio_pago_item(medio, db)
+        persona = db.query(models.Persona).filter(
+            models.Persona.identificador == medio.cliente
+        ).first()
+        detalle = db.query(models.PersonaDetalle).filter(
+            models.PersonaDetalle.persona == medio.cliente
+        ).first()
+        items.append(item.model_copy(update={
+            "clienteId": medio.cliente,
+            "nombreCliente": persona.nombre if persona else None,
+            "mailCliente": detalle.mail if detalle else None,
+        }))
+
+    return schemas.MedioPagoListResponse(
+        tieneMedioPagoVerificado=False,
         medios=items,
     )
 
@@ -199,8 +230,18 @@ def get_cheque_certificado(db: Session, medio_pago_id: int):
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("", response_model=schemas.MedioPagoListResponse)
-def ep_get_medios_pago_cliente(cliente_id: int = Query(...), db: Session = Depends(get_db)):
-    return get_medios_pago_cliente(db, cliente_id)
+def ep_get_medios_pago_cliente(cliente_id: Optional[int] = Query(None), db: Session = Depends(get_db)):
+    """
+    - Con `cliente_id`: devuelve los medios de pago de ESE cliente (comportamiento original).
+    - Sin `cliente_id`: devuelve TODOS los medios de pago aún no aprobados
+      (estado='pendiente') de TODOS los clientes, cada uno con el id y los
+      datos del usuario al que pertenece (clienteId, nombreCliente,
+      mailCliente), para que un admin pueda revisarlos sin tener que pedirlos
+      uno por uno.
+    """
+    if cliente_id is not None:
+        return get_medios_pago_cliente(db, cliente_id)
+    return get_medios_pago_pendientes(db)
 
 @router.post("/cuenta-bancaria", response_model=schemas.CuentaBancariaResponse)
 def ep_create_cuenta_bancaria(request: schemas.CuentaBancariaCreate, db: Session = Depends(get_db)):

@@ -68,29 +68,51 @@ def get_condiciones_articulo(db: Session, producto_id: int):
         models.AceptacionArticulo.producto == producto_id
     ).first()
 
-    if not item:
+    # Caso 1: el artículo ya fue aceptado e incorporado al catálogo de la
+    # subasta -> mostramos las condiciones definitivas registradas allí.
+    if item:
+        catalogo = db.query(models.Catalogo).filter(models.Catalogo.identificador == item.catalogo).first()
+        subasta = db.query(models.Subasta).filter(
+            models.Subasta.identificador == catalogo.subasta
+        ).first() if catalogo and catalogo.subasta else None
+
         return schemas.ArticuloCondicionesResponse(
             productoId=producto_id,
             titulo=titulo,
-            tieneCondiciones=False,
+            tieneCondiciones=True,
+            precioBase=float(item.precioBase),
+            comision=float(item.comision),
+            subastaFecha=subasta.fecha if subasta else None,
+            subastaHora=subasta.hora if subasta else None,
+            subastaUbicacion=subasta.ubicacion if subasta else None,
             aceptacion=aceptacion.estado if aceptacion else None,
         )
 
-    catalogo = db.query(models.Catalogo).filter(models.Catalogo.identificador == item.catalogo).first()
-    subasta = db.query(models.Subasta).filter(
-        models.Subasta.identificador == catalogo.subasta
-    ).first() if catalogo and catalogo.subasta else None
+    # Caso 2: el admin aprobó el artículo y propuso condiciones, pero el dueño
+    # todavía no las aceptó (por lo tanto no existe ItemCatalogo todavía).
+    if aceptacion and aceptacion.precioBasePropuesto is not None:
+        subasta = db.query(models.Subasta).filter(
+            models.Subasta.identificador == aceptacion.subastaPropuesta
+        ).first() if aceptacion.subastaPropuesta else None
 
+        return schemas.ArticuloCondicionesResponse(
+            productoId=producto_id,
+            titulo=titulo,
+            tieneCondiciones=True,
+            precioBase=float(aceptacion.precioBasePropuesto),
+            comision=float(aceptacion.comisionPropuesta) if aceptacion.comisionPropuesta is not None else None,
+            subastaFecha=subasta.fecha if subasta else None,
+            subastaHora=subasta.hora if subasta else None,
+            subastaUbicacion=subasta.ubicacion if subasta else None,
+            aceptacion=aceptacion.estado,
+        )
+
+    # Caso 3: todavía no hay condiciones propuestas (el admin no aprobó aún).
     return schemas.ArticuloCondicionesResponse(
         productoId=producto_id,
         titulo=titulo,
-        tieneCondiciones=True,
-        precioBase=float(item.precioBase),
-        comision=float(item.comision),
-        subastaFecha=subasta.fecha if subasta else None,
-        subastaHora=subasta.hora if subasta else None,
-        subastaUbicacion=subasta.ubicacion if subasta else None,
-        aceptacion=aceptacion.estado,
+        tieneCondiciones=False,
+        aceptacion=aceptacion.estado if aceptacion else None,
     )
 
 
@@ -98,14 +120,43 @@ def _set_aceptacion(db: Session, producto_id: int, estado: str) -> schemas.Mensa
     obj = db.query(models.AceptacionArticulo).filter(
         models.AceptacionArticulo.producto == producto_id
     ).first()
-    if not obj:
-        obj = models.AceptacionArticulo(producto=producto_id)
-        db.add(obj)
+    if not obj or obj.precioBasePropuesto is None or obj.subastaPropuesta is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No hay condiciones propuestas para este artículo todavía.",
+        )
+    if obj.estado == "aceptado":
+        raise HTTPException(status_code=409, detail="Las condiciones ya fueron aceptadas anteriormente.")
+
+    if estado == "aceptado":
+        # Recién en este momento (cuando el dueño acepta las condiciones) el
+        # producto se incorpora efectivamente al catálogo de la subasta.
+        catalogo = db.query(models.Catalogo).filter(
+            models.Catalogo.subasta == obj.subastaPropuesta
+        ).first()
+        if not catalogo:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No existe catálogo para la subasta #{obj.subastaPropuesta}",
+            )
+        ya_en_catalogo = db.query(models.ItemCatalogo).filter(
+            models.ItemCatalogo.catalogo == catalogo.identificador,
+            models.ItemCatalogo.producto == producto_id,
+        ).first()
+        if not ya_en_catalogo:
+            db.add(models.ItemCatalogo(
+                catalogo=catalogo.identificador,
+                producto=producto_id,
+                precioBase=obj.precioBasePropuesto,
+                comision=obj.comisionPropuesta,
+                subastado="no",
+            ))
+
     obj.estado = estado
     obj.fecha = datetime.now()
     db.commit()
     if estado == "aceptado":
-        return schemas.MensajeResponse(mensaje="Condiciones aceptadas correctamente.")
+        return schemas.MensajeResponse(mensaje="Condiciones aceptadas correctamente. El artículo fue incorporado a la subasta.")
     return schemas.MensajeResponse(mensaje="Condiciones rechazadas. El artículo será devuelto.")
 
 
