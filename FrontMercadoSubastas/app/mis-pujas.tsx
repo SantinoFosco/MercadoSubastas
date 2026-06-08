@@ -134,7 +134,7 @@ export default function MisPujasScreen() {
               const esGanada = puja.ganador === 'si';
               const pagoConfig = puja.estadoPago ? PAGO_CONFIG[puja.estadoPago] : null;
               return (
-                <View key={idx} style={[styles.card, esGanada && styles.cardGanada]}>
+                <View key={`${puja.subastaId}-${puja.itemId}-${puja.fechaHora}`} style={[styles.card, esGanada && styles.cardGanada]}>
                   {/* Header */}
                   <View style={styles.cardHeader}>
                     <View style={{ flex: 1 }}>

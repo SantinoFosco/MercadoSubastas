@@ -77,8 +77,8 @@ export default function PerfilScreen() {
 
   useFocusEffect(useCallback(() => { fetchProfile(); }, [fetchProfile]));
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     router.replace('/login');
   };
 
@@ -169,25 +169,33 @@ export default function PerfilScreen() {
         </Pressable>
 
         {/* ─── Multas Button ──────────────────────────────────────── */}
-        {multasPendientes > 0 && (
-          <Pressable
-            style={[styles.statsButton, styles.multaButton]}
-            onPress={() => router.push('/perfil/multas')}
-          >
-            <View style={styles.statsButtonLeft}>
-              <View style={[styles.statsIconCircle, styles.multaIconCircle]}>
-                <MaterialCommunityIcons name="alert-circle-outline" size={22} color="#D32F2F" />
-              </View>
-              <View>
-                <Text style={[styles.statsButtonTitle, styles.multaTitle]}>
-                  Multas pendientes ({multasPendientes})
-                </Text>
-                <Text style={styles.statsButtonSubtitle}>Debés abonarlas antes de pujar</Text>
-              </View>
+        <Pressable
+          style={[styles.statsButton, multasPendientes > 0 && styles.multaButton]}
+          onPress={() => router.push('/perfil/multas')}
+        >
+          <View style={styles.statsButtonLeft}>
+            <View style={[styles.statsIconCircle, multasPendientes > 0 && styles.multaIconCircle]}>
+              <MaterialCommunityIcons
+                name={multasPendientes > 0 ? 'alert-circle-outline' : 'check-circle-outline'}
+                size={22}
+                color={multasPendientes > 0 ? '#D32F2F' : '#8A6D3B'}
+              />
             </View>
-            <MaterialCommunityIcons name="chevron-right" size={24} color="#D32F2F" />
-          </Pressable>
-        )}
+            <View>
+              <Text style={[styles.statsButtonTitle, multasPendientes > 0 && styles.multaTitle]}>
+                {multasPendientes > 0 ? `Multas pendientes (${multasPendientes})` : 'Historial de multas'}
+              </Text>
+              <Text style={styles.statsButtonSubtitle}>
+                {multasPendientes > 0 ? 'Debés abonarlas antes de pujar' : 'Sin multas pendientes'}
+              </Text>
+            </View>
+          </View>
+          <MaterialCommunityIcons
+            name="chevron-right"
+            size={24}
+            color={multasPendientes > 0 ? '#D32F2F' : '#8A6D3B'}
+          />
+        </Pressable>
 
         {/* ─── Cerrar Sesión Link ────────────────────────────────── */}
         <Pressable style={styles.logoutButton} onPress={handleLogout}>

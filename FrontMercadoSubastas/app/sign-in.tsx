@@ -62,12 +62,6 @@ export default function SignInScreen() {
         return;
       }
 
-      // Usuario pendiente de verificación por empleado
-      if (data.estado === 'inactivo') {
-        setError('Tu cuenta está pendiente de verificación. Te notificaremos por mail cuando sea aprobada.');
-        return;
-      }
-
       // Usuario aprobado pero debe cambiar su clave temporal
       if (data.claveTemporal) {
         router.push({ pathname: '/register_final', params: { mail: email.trim(), clienteId: String(data.identificador) } });

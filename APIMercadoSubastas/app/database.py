@@ -8,6 +8,8 @@ load_dotenv()
 
 # Obtenemos la URL de la conexión
 SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL")
+if not SQLALCHEMY_DATABASE_URL:
+    raise EnvironmentError("La variable de entorno DATABASE_URL no está configurada")
 
 # Creamos el motor de la base de datos
 engine = create_engine(SQLALCHEMY_DATABASE_URL)
@@ -21,5 +23,8 @@ def get_db():
     db = SessionLocal()
     try:
         yield db
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()

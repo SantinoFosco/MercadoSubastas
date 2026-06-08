@@ -190,3 +190,21 @@ def ep_login(request: schemas.LoginRequest, db: Session = Depends(get_db)):
 @router.put("/cambiar-clave", response_model=schemas.MensajeResponse)
 def ep_cambiar_clave(request: schemas.CambiarClaveRequest, db: Session = Depends(get_db)):
     return cambiar_clave(db, request)
+
+@router.get("/estado")
+def ep_estado_registro(mail: str, db: Session = Depends(get_db)):
+    """Estado de verificación sin necesitar contraseña (para polling desde la app)."""
+    mail_lower = mail.lower()
+    detalle = db.query(models.PersonaDetalle).filter(
+        models.PersonaDetalle.mail == mail_lower
+    ).first()
+    if not detalle:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    cliente = db.query(models.Cliente).filter(
+        models.Cliente.identificador == detalle.persona
+    ).first()
+    if not cliente:
+        return {"estado": "pendiente", "identificador": None, "claveTemporal": detalle.claveTemporal}
+    if cliente.admitido == "no":
+        return {"estado": "rechazado", "identificador": None, "claveTemporal": False}
+    return {"estado": "aprobado", "identificador": detalle.persona, "claveTemporal": detalle.claveTemporal}

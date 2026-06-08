@@ -291,7 +291,18 @@ export default function MediosPagoScreen() {
             <TextInput style={styles.input} placeholder="Titular" value={titular} onChangeText={setTitular} />
             <TextInput style={styles.input} placeholder="Últimos 4 dígitos" value={ultimos4} onChangeText={setUltimos4} keyboardType="numeric" maxLength={4} />
             <TextInput style={styles.input} placeholder="Vencimiento (AAAA-MM-DD)" value={vencimiento} onChangeText={setVencimiento} />
-            <TextInput style={styles.input} placeholder="Marca (Visa, Mastercard...)" value={marca} onChangeText={setMarca} />
+            <View style={styles.brandRow}>
+              {['Visa', 'Mastercard', 'Amex'].map((b) => (
+                <TouchableOpacity
+                  key={b}
+                  style={[styles.brandButton, marca === b && styles.brandButtonActive]}
+                  onPress={() => setMarca(b)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.brandButtonText, marca === b && styles.brandButtonTextActive]}>{b}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
             <TextInput style={styles.input} placeholder="Tipo (debito, credito)" value={tipoTarjeta} onChangeText={setTipoTarjeta} />
             <TouchableOpacity style={styles.submitButton} onPress={handleAddTarjeta} disabled={submitting} activeOpacity={0.85}>
               <Text style={styles.submitButtonText}>{submitting ? 'Enviando...' : 'Agregar Tarjeta'}</Text>
@@ -404,4 +415,13 @@ const styles = StyleSheet.create({
     height: 48, alignItems: 'center', justifyContent: 'center', marginTop: 4,
   },
   submitButtonText: { color: '#FFFFFF', fontWeight: '700', fontSize: 15 },
+  brandRow: { flexDirection: 'row', gap: 8 },
+  brandButton: {
+    flex: 1, height: 44, borderRadius: 10, borderWidth: 1.5,
+    borderColor: '#E0E0E0', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#FAFBFD',
+  },
+  brandButtonActive: { borderColor: '#FFD700', backgroundColor: '#FFF9E6' },
+  brandButtonText: { fontSize: 13, fontWeight: '600', color: '#666' },
+  brandButtonTextActive: { color: '#8A6D3B' },
 });

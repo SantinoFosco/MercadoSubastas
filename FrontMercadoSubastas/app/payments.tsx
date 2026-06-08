@@ -31,7 +31,7 @@ const COUNTRIES = [
   { label: 'Chile',     value: 4 },
 ];
 
-const CARD_BRANDS = ['Visa', 'Mastercard', 'Amex', 'Cabal', 'Naranja'];
+const CARD_BRANDS = ['Visa', 'Mastercard', 'Amex'];
 
 const MONTHS = [
   { label: 'Enero',      value: '01' },
@@ -82,7 +82,7 @@ function InlineError({ message }: { message: string }) {
 export default function PaymentsScreen() {
   const router = useRouter();
   const { clienteId } = useLocalSearchParams<{ clienteId: string }>();
-  const clienteIdNum = clienteId ? parseInt(clienteId, 10) : 0;
+  const clienteIdNum = parseInt(clienteId ?? '', 10) || 0;
 
   const [expandedCard, setExpandedCard]       = useState<string | null>(null);
   const [registeredMethods, setRegisteredMethods] = useState<PaymentMethod[]>([]);

@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   TextInput,
   Alert,
+  Image,
 } from 'react-native';
 import { Text } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -46,7 +47,7 @@ export default function SubastaVivoScreen() {
     if (!session?.identificador) {
       router.replace('/sign-in');
     }
-  }, [session]);
+  }, [session, router]);
 
   // ── Registro como asistente ─────────────────────────────────────────────────
   const [asistenteId, setAsistenteId] = useState<number | null>(null);
@@ -106,7 +107,7 @@ export default function SubastaVivoScreen() {
       pathname: '/cierre-subasta/winner',
       params: { subastaId: subastaId, clienteId: String(clienteId) },
     });
-  }, [auctionEnded, hasWon]);
+  }, [auctionEnded, hasWon, subastaId, clienteId, router]);
 
   // F3: mostrar error de conexión si el usuario ya está en otra subasta
   useEffect(() => {
@@ -258,7 +259,15 @@ export default function SubastaVivoScreen() {
           </View>
 
           <View style={styles.heroIconContainer}>
-            <MaterialCommunityIcons name="watch" size={80} color="#555555" />
+            {auctionState?.imagen ? (
+              <Image
+                source={{ uri: `data:image/jpeg;base64,${auctionState.imagen}` }}
+                style={styles.heroImage}
+                resizeMode="cover"
+              />
+            ) : (
+              <MaterialCommunityIcons name="gavel" size={80} color="#555555" />
+            )}
           </View>
 
           <View style={styles.heroOverlay}>
@@ -590,6 +599,12 @@ const styles = StyleSheet.create({
   heroIconContainer: {
     alignItems: 'center',
     justifyContent: 'center',
+    width: '100%',
+    height: '100%',
+  },
+  heroImage: {
+    width: '100%',
+    height: '100%',
   },
   heroOverlay: {
     position: 'absolute',

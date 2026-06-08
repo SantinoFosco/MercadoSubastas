@@ -3,6 +3,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Image,
   Pressable,
   ScrollView,
@@ -51,8 +52,15 @@ export default function ArticuloAprobadoScreen() {
     if (!productoId) return;
     setSubmitting(true);
     try {
-      await fetch(API_ENDPOINTS.aceptarCondiciones(productoId), { method: 'POST' });
+      const res = await fetch(API_ENDPOINTS.aceptarCondiciones(productoId), { method: 'POST' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        Alert.alert('Error', data.detail ?? 'No se pudo aceptar. Intentá nuevamente.');
+        return;
+      }
       router.replace({ pathname: '/vender/ubicacion-seguro', params: { titulo } });
+    } catch {
+      Alert.alert('Error', 'Error de conexión. Verificá tu internet.');
     } finally {
       setSubmitting(false);
     }
@@ -62,8 +70,15 @@ export default function ArticuloAprobadoScreen() {
     if (!productoId) return;
     setSubmitting(true);
     try {
-      await fetch(API_ENDPOINTS.rechazarCondiciones(productoId), { method: 'POST' });
+      const res = await fetch(API_ENDPOINTS.rechazarCondiciones(productoId), { method: 'POST' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        Alert.alert('Error', data.detail ?? 'No se pudo rechazar. Intentá nuevamente.');
+        return;
+      }
       router.back();
+    } catch {
+      Alert.alert('Error', 'Error de conexión. Verificá tu internet.');
     } finally {
       setSubmitting(false);
     }

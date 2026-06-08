@@ -100,7 +100,9 @@ export function useAuctionWebSocket(subastaId: string | null, clienteId: number 
         } else if (msg.type === 'error') {
           setConnectionError(msg.detail);
         }
-      } catch {}
+      } catch (err) {
+        console.warn('[WS] Failed to parse message:', err);
+      }
     };
   }, [subastaId, clienteId]);
 

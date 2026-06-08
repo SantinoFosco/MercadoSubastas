@@ -7,7 +7,7 @@ type SessionContextType = {
   isLoading: boolean;
   getCategoria: () => Categoria;
   login: (data: UserSession) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
 };
 
 const SessionContext = createContext<SessionContextType>({
@@ -15,7 +15,7 @@ const SessionContext = createContext<SessionContextType>({
   isLoading: true,
   getCategoria: () => 'comun',
   login: async () => {},
-  logout: () => {},
+  logout: async () => {},
 });
 
 export function SessionProvider({ children }: { children: React.ReactNode }) {
@@ -33,7 +33,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
           // and the old identificador no longer maps to any user.
           const res = await fetch(API_ENDPOINTS.perfilCompleto(stored.identificador));
           if (res.status === 404) {
-            SessionStore.clear();
+            await SessionStore.clear();
             setSession(null);
           } else {
             setSession(stored);
@@ -55,8 +55,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     setSession(data);
   };
 
-  const logout = (): void => {
-    SessionStore.clear();
+  const logout = async (): Promise<void> => {
+    await SessionStore.clear();
     setSession(null);
   };
 

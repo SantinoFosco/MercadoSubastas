@@ -140,11 +140,13 @@ def ep_delete_empleado(empleado_id: int, db: Session = Depends(get_db)):
     return {"message": f"Empleado {empleado_id} eliminado con éxito"}
 
 @router.get("/clientes/", response_model=list[schemas.ClienteResponse])
-def ep_get_clientes(db: Session = Depends(get_db)):
-    return db.query(models.Cliente).all()
+def ep_get_clientes(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    return db.query(models.Cliente).offset(skip).limit(limit).all()
 
 @router.post("/clientes/", response_model=schemas.ClienteResponse)
 def ep_create_cliente(request: schemas.ClienteCreate, db: Session = Depends(get_db)):
+    if not db.query(models.Persona).filter(models.Persona.identificador == request.identificador).first():
+        raise HTTPException(status_code=404, detail="No existe una Persona con ese identificador")
     nuevo = models.Cliente(
         identificador=request.identificador, numeroPais=request.numeroPais,
         admitido="no", categoria="comun", verificador=request.verificador,
@@ -159,12 +161,11 @@ def ep_get_perfil(cliente_id: int, db: Session = Depends(get_db)):
     cliente = db.query(models.Cliente).filter(models.Cliente.identificador == cliente_id).first()
     if not cliente:
         raise HTTPException(status_code=404, detail="Cliente no encontrado")
-    persona = db.query(models.Persona).filter(
-        models.Persona.identificador == cliente_id
-    ).first()
-    detalle = db.query(models.PersonaDetalle).filter(
-        models.PersonaDetalle.persona == cliente_id
-    ).first()
+    persona = db.query(models.Persona).filter(models.Persona.identificador == cliente_id).first()
+    detalle = db.query(models.PersonaDetalle).filter(models.PersonaDetalle.persona == cliente_id).first()
+    pais = db.query(models.Pais).filter(
+        models.Pais.numero == cliente.numeroPais
+    ).first() if cliente.numeroPais else None
     return schemas.PerfilCompletoResponse(
         identificador=cliente_id,
         nombre=persona.nombre if persona else "",
@@ -173,6 +174,7 @@ def ep_get_perfil(cliente_id: int, db: Session = Depends(get_db)):
         categoria=cliente.categoria,
         admitido=cliente.admitido,
         numeroPais=cliente.numeroPais,
+        paisNombre=pais.nombre if pais else None,
     )
 
 @router.get("/clientes/{cliente_id}", response_model=schemas.ClienteResponse)

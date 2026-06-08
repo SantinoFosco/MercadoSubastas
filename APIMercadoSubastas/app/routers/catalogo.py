@@ -1,3 +1,4 @@
+import base64 as _base64
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -25,35 +26,75 @@ def get_home(db: Session, categoria: str) -> schemas.HomeResponse:
     if not subastas:
         return schemas.HomeResponse(subastaDestacada=None, subastasGenerales=[])
 
+    subasta_ids = [s.identificador for s in subastas]
+
+    # Batch: catálogos por subasta
+    catalogos = db.query(models.Catalogo).filter(
+        models.Catalogo.subasta.in_(subasta_ids)
+    ).all()
+    cat_by_subasta: dict = {c.subasta: c for c in catalogos}
+    cat_ids = [c.identificador for c in catalogos]
+
+    # Batch: primer ítem y conteo de activos por catálogo
+    item_by_cat: dict = {}
+    activos_by_cat: dict = {}
+    if cat_ids:
+        from sqlalchemy import func as _func
+        sub_min = (
+            db.query(
+                models.ItemCatalogo.catalogo,
+                _func.min(models.ItemCatalogo.identificador).label("min_id"),
+            )
+            .filter(models.ItemCatalogo.catalogo.in_(cat_ids))
+            .group_by(models.ItemCatalogo.catalogo)
+            .subquery()
+        )
+        primeros = (
+            db.query(models.ItemCatalogo)
+            .join(sub_min, models.ItemCatalogo.identificador == sub_min.c.min_id)
+            .all()
+        )
+        item_by_cat = {item.catalogo: item for item in primeros}
+
+        activos_rows = (
+            db.query(
+                models.ItemCatalogo.catalogo,
+                _func.count(models.ItemCatalogo.identificador).label("cnt"),
+            )
+            .filter(
+                models.ItemCatalogo.catalogo.in_(cat_ids),
+                models.ItemCatalogo.subastado == "no",
+            )
+            .group_by(models.ItemCatalogo.catalogo)
+            .all()
+        )
+        activos_by_cat = {row.catalogo: row.cnt for row in activos_rows}
+
     def _titulo(subasta_id: int) -> str:
-        cat = db.query(models.Catalogo).filter(models.Catalogo.subasta == subasta_id).first()
+        cat = cat_by_subasta.get(subasta_id)
         return cat.descripcion if cat else f"Subasta #{subasta_id}"
 
-    def _primer_producto_id(subasta_id: int) -> int | None:
-        cat = db.query(models.Catalogo).filter(models.Catalogo.subasta == subasta_id).first()
+    def _primer_producto_id(subasta_id: int):
+        cat = cat_by_subasta.get(subasta_id)
         if not cat:
             return None
-        item = db.query(models.ItemCatalogo).filter(models.ItemCatalogo.catalogo == cat.identificador).first()
+        item = item_by_cat.get(cat.identificador)
         return item.producto if item else None
 
     def _en_vivo(subasta) -> bool:
-        # datetime.now(_AR_TZ).replace(tzinfo=None) gives the current naive
-        # Argentina time, so the comparison with the stored naive hora is correct
-        # regardless of the server/Docker timezone.
         ahora = datetime.now(tz=_AR_TZ).replace(tzinfo=None)
         inicio = datetime.combine(subasta.fecha, subasta.hora)
         if subasta.estado != "abierta" or inicio > ahora:
             return False
-        cat = db.query(models.Catalogo).filter(models.Catalogo.subasta == subasta.identificador).first()
+        cat = cat_by_subasta.get(subasta.identificador)
         if not cat:
             return False
-        return db.query(models.ItemCatalogo).filter(
-            models.ItemCatalogo.catalogo == cat.identificador,
-            models.ItemCatalogo.subastado == "no",
-        ).count() > 0
+        return activos_by_cat.get(cat.identificador, 0) > 0
 
     dest = subastas[0]
-    postores = db.query(models.Asistente).filter(models.Asistente.subasta == dest.identificador).count()
+    postores = db.query(models.Asistente).filter(
+        models.Asistente.subasta == dest.identificador
+    ).count()
     historial = (
         db.query(models.HistorialPujos)
         .filter(models.HistorialPujos.subasta == dest.identificador)
@@ -61,22 +102,30 @@ def get_home(db: Session, categoria: str) -> schemas.HomeResponse:
         .limit(5)
         .all()
     )
-    actividad = []
-    for h in historial:
-        persona = db.query(models.Persona).filter(models.Persona.identificador == h.cliente).first()
-        item = db.query(models.ItemCatalogo).filter(models.ItemCatalogo.identificador == h.itemCatalogo).first()
-        if not item:
-            continue
-        pp = db.query(models.ProductoPresentacion).filter(
-            models.ProductoPresentacion.producto == item.producto
-        ).first()
-        actividad.append(schemas.ActividadReciente(
-            pujaId=h.identificador,
-            nombreComprador=persona.nombre if persona else "Desconocido",
-            nombreProducto=pp.titulo if pp else "Desconocido",
-            fecha=h.fechaHora,
-            valor=f"${h.importe:,.2f}",
-        ))
+
+    # Batch: personas, ítems y presentaciones para el historial
+    actividad: list = []
+    if historial:
+        hist_cliente_ids = list({h.cliente for h in historial})
+        hist_item_ids = list({h.itemCatalogo for h in historial})
+        pers_h = {p.identificador: p for p in db.query(models.Persona).filter(
+            models.Persona.identificador.in_(hist_cliente_ids)).all()}
+        items_h = {i.identificador: i for i in db.query(models.ItemCatalogo).filter(
+            models.ItemCatalogo.identificador.in_(hist_item_ids)).all()}
+        prod_ids_h = list({i.producto for i in items_h.values()})
+        pps_h = {pp.producto: pp for pp in db.query(models.ProductoPresentacion).filter(
+            models.ProductoPresentacion.producto.in_(prod_ids_h)).all()} if prod_ids_h else {}
+        for h in historial:
+            persona = pers_h.get(h.cliente)
+            item = items_h.get(h.itemCatalogo)
+            pp = pps_h.get(item.producto) if item else None
+            actividad.append(schemas.ActividadReciente(
+                pujaId=h.identificador,
+                nombreComprador=persona.nombre if persona else "Desconocido",
+                nombreProducto=pp.titulo if pp else "Desconocido",
+                fecha=h.fechaHora,
+                valor=f"${h.importe:,.2f}",
+            ))
 
     primer_prod = _primer_producto_id(dest.identificador)
     destacada = schemas.SubastaDestacada(
@@ -148,6 +197,7 @@ def get_detalle_producto_catalogo(db: Session, subasta_id: int, producto_id: int
         precioBase=item.precioBase,
         subastado=item.subastado,
         imagen=get_foto_b64(db, producto_id),
+        procedencia=pp.procedencia if pp else None,
     )
 
 
@@ -181,11 +231,10 @@ def ep_delete_producto(producto_id: int, db: Session = Depends(get_db)):
 
 @router.post("/fotos/", response_model=schemas.FotoResponse, status_code=201)
 def ep_create_foto(request: schemas.FotoCreate, db: Session = Depends(get_db)):
-    import base64
     foto_bytes = None
     if request.imagen:
         try:
-            foto_bytes = base64.b64decode(request.imagen)
+            foto_bytes = _base64.b64decode(request.imagen)
         except Exception:
             raise HTTPException(status_code=422, detail="La imagen no es un base64 válido")
     nueva = models.Foto(producto=request.producto, foto=foto_bytes)

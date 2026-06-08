@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { useState, useEffect } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -70,13 +71,20 @@ export default function SubastarArticuloScreen() {
     const base64 = result.assets[0].base64;
     if (!currentProductoId) return;
     try {
-      await fetch(API_ENDPOINTS.subirFoto, {
+      const res = await fetch(API_ENDPOINTS.subirFoto, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ producto: currentProductoId, imagen: base64 }),
       });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        Alert.alert('Error', data.detail ?? 'No se pudo subir la foto. Intentá nuevamente.');
+        return;
+      }
       setUploadedFotos((prev) => ({ ...prev, [slotIndex]: result.assets[0].uri }));
-    } catch {}
+    } catch {
+      Alert.alert('Error', 'Error de conexión al subir la foto.');
+    }
   };
 
   const handleSubmit = async () => {

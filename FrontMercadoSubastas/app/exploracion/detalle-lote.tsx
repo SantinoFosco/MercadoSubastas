@@ -24,6 +24,7 @@ type DetalleProducto = {
   precioBase: number;
   subastado: 'si' | 'no';
   imagen: string | null;
+  procedencia: string | null;
 };
 
 type TabId = 'detalles' | 'procedencia' | 'estado';
@@ -61,7 +62,6 @@ export default function DetalleLoteScreen() {
       setLoading(false);
       return;
     }
-    setLoading(false);
     setError('');
     try {
       const res = await fetch(API_ENDPOINTS.detalleProducto(subastaId, productoId));
@@ -105,13 +105,31 @@ export default function DetalleLoteScreen() {
       );
     }
 
+    if (activeTab === 'procedencia') {
+      return (
+        <View style={styles.tabContent}>
+          <Text style={styles.sectionTitle}>Procedencia</Text>
+          <Text style={styles.descriptionText}>
+            {producto.procedencia ?? 'No se registró información de procedencia para este artículo.'}
+          </Text>
+        </View>
+      );
+    }
+
     return (
       <View style={styles.tabContent}>
-        <Text style={styles.placeholderText}>
-          {activeTab === 'procedencia'
-            ? 'Información de procedencia próximamente disponible.'
-            : 'Informe de estado próximamente disponible.'}
-        </Text>
+        <Text style={styles.sectionTitle}>Estado del lote</Text>
+        <View style={styles.specsGrid}>
+          <View style={[styles.specBox, { width: '100%' }]}>
+            <Text style={styles.specLabel}>ESTADO</Text>
+            <Text style={[
+              styles.specValue,
+              { color: producto.subastado === 'si' ? '#C62828' : '#2E7D32' },
+            ]}>
+              {producto.subastado === 'si' ? 'Adjudicado' : 'Disponible para subasta'}
+            </Text>
+          </View>
+        </View>
       </View>
     );
   };

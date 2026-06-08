@@ -131,6 +131,7 @@ export default function CatalogoScreen() {
       <TouchableOpacity
         style={[styles.detailsButton, lot.subastado === 'si' && styles.detailsButtonDisabled]}
         activeOpacity={0.7}
+        disabled={lot.subastado === 'si'}
         onPress={() => router.push({
           pathname: '/exploracion/detalle-lote',
           params: { subastaId: subastaId ?? '', productoId: String(lot.productoId) },

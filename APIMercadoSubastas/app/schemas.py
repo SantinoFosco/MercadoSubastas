@@ -177,6 +177,7 @@ class DetalleProducto(BaseModel):
     precioBase: Decimal
     subastado: str
     imagen: Optional[str] = None
+    procedencia: Optional[str] = None
 
 #------------------ Sala de Subastas -----------------------#
 
@@ -566,7 +567,7 @@ class MultaResponse(BaseModel):
     subasta: int
     monto: Decimal
     pagado: str
-    fecha_limite: datetime
+    fecha_limite: Optional[datetime] = None
     class Config:
         from_attributes = True
 
@@ -580,6 +581,7 @@ class PerfilCompletoResponse(BaseModel):
     categoria: str
     admitido: str
     numeroPais: Optional[int] = None
+    paisNombre: Optional[str] = None
 
 #------------------ Estado de compras ----------------------#
 

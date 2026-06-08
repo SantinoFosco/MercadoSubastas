@@ -261,7 +261,9 @@ def create_pujo(db: Session, request: schemas.PujoRequest):
     if multa:
         return None, "multa_pendiente"
 
-    item = db.query(models.ItemCatalogo).filter(models.ItemCatalogo.identificador == request.itemId).first()
+    item = db.query(models.ItemCatalogo).filter(
+        models.ItemCatalogo.identificador == request.itemId
+    ).with_for_update().first()
     if not item:
         return None, "item"
     if item.subastado == "si":
@@ -410,20 +412,27 @@ async def _cerrar_item(item_id: int, subasta_id: int):
 
         db.commit()
 
-        # F6: incluir ganadorClienteId para que el front detecte si el usuario ganó
-        await manager.broadcast(subasta_id, {
-            "type": "item_closed",
-            "data": {
-                "itemCatalogoId": item_id,
-                "ganadorNombre": ganador_nombre,
-                "ganadorClienteId": ganador_cliente_id,
-                "importe": importe_final,
-            },
-        })
+        # F6: broadcast item_closed. Wrapped so a delivery failure doesn't
+        # interrupt the next-item logic (DB is already committed).
+        try:
+            await manager.broadcast(subasta_id, {
+                "type": "item_closed",
+                "data": {
+                    "itemCatalogoId": item_id,
+                    "ganadorNombre": ganador_nombre,
+                    "ganadorClienteId": ganador_cliente_id,
+                    "importe": importe_final,
+                },
+            })
+        except Exception:
+            pass  # clients will receive correct state on reconnect
 
         vivo = get_subasta_en_vivo(db=db, subasta_id=subasta_id)
         if vivo:
-            await manager.broadcast(subasta_id, {"type": "auction_state", "data": _vivo_to_dict(vivo)})
+            try:
+                await manager.broadcast(subasta_id, {"type": "auction_state", "data": _vivo_to_dict(vivo)})
+            except Exception:
+                pass
             next_item_id = vivo.itemCatalogoId
             if next_item_id not in _item_timers or _item_timers[next_item_id].done():
                 _item_timers[next_item_id] = asyncio.create_task(_cerrar_item(next_item_id, subasta_id))
@@ -432,7 +441,10 @@ async def _cerrar_item(item_id: int, subasta_id: int):
             if subasta_upd:
                 subasta_upd.estado = "cerrada"
                 db.commit()
-            await manager.broadcast(subasta_id, {"type": "auction_ended", "data": {"subastaId": subasta_id}})
+            try:
+                await manager.broadcast(subasta_id, {"type": "auction_ended", "data": {"subastaId": subasta_id}})
+            except Exception:
+                pass
 
     except Exception:
         db.rollback()

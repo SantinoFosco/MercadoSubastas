@@ -74,8 +74,8 @@ export default function RegisterStep1() {
       Alert.alert('Documento Inválido', 'El número de documento solo debe contener números, sin puntos ni espacios.');
       return;
     }
-    if (!email.includes('@')) {
-      Alert.alert('Correo Inválido', 'Por favor ingresa un correo electrónico válido que contenga un "@".');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      Alert.alert('Correo Inválido', 'Por favor ingresa un correo electrónico válido.');
       return;
     }
     if (!dniFrente || !dniDorso) {

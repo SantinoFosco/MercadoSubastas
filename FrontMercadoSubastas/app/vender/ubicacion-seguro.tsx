@@ -40,8 +40,8 @@ export default function UbicacionSeguroScreen() {
                 <MaterialCommunityIcons name="map-marker" size={22} color="#FFD700" />
               </View>
               <View style={styles.locationTextContainer}>
-                <Text style={styles.locationTitle}>Depósito Central</Text>
-                <Text style={styles.locationSubtitle}>{'Buenos Aires,\nArgentina'}</Text>
+                <Text style={styles.locationTitle}>Depósito de la casa de subastas</Text>
+                <Text style={styles.locationSubtitle}>Los detalles de ubicación exacta serán comunicados por mail.</Text>
               </View>
             </View>
 
@@ -65,7 +65,7 @@ export default function UbicacionSeguroScreen() {
               </View>
               <Text style={styles.insuranceLabel}>COMPAÑÍA</Text>
             </View>
-            <Text style={styles.insuranceValue}>Seguros Globales</Text>
+            <Text style={styles.insuranceValue}>Aseguradora de la casa</Text>
           </View>
 
           {/* Row 2: Nro de Póliza */}
@@ -76,7 +76,7 @@ export default function UbicacionSeguroScreen() {
               </View>
               <Text style={styles.insuranceLabel}>NRO DE PÓLIZA</Text>
             </View>
-            <Text style={[styles.insuranceValue, styles.monoText]}>AU-99283-SL</Text>
+            <Text style={[styles.insuranceValue, styles.monoText]}>A confirmar</Text>
           </View>
 
           {/* Row 3: Valor Asegurado */}
@@ -87,12 +87,7 @@ export default function UbicacionSeguroScreen() {
               </View>
               <Text style={styles.insuranceLabel}>VALOR ASEGURADO</Text>
             </View>
-            <View style={styles.amountContainer}>
-              <Text style={styles.amountText}>$12,500</Text>
-              <View style={styles.currencyTag}>
-                <Text style={styles.currencyTagText}>USD</Text>
-              </View>
-            </View>
+            <Text style={styles.insuranceValue}>Según tasación del artículo</Text>
           </View>
         </View>
 

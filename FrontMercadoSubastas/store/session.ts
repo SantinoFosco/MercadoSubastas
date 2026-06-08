@@ -41,8 +41,8 @@ export const SessionStore = {
     }
   },
 
-  clear(): void {
+  async clear(): Promise<void> {
     _session = null;
-    SecureStore.deleteItemAsync(SESSION_KEY).catch(() => {});
+    await SecureStore.deleteItemAsync(SESSION_KEY);
   },
 };

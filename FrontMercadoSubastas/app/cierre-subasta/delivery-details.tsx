@@ -154,7 +154,7 @@ export default function DeliveryDetailsScreen() {
             <View style={styles.deliveryTextContainer}>
               <Text style={styles.deliveryOptionTitle}>Envío a domicilio</Text>
               <Text style={styles.deliveryOptionAddress}>
-                {direccion || (session as any)?.direccion || 'Dirección no disponible'}
+                {direccion || session?.direccion || 'Dirección no disponible'}
               </Text>
             </View>
             <View style={styles.radioOuter}>

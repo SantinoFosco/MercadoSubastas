@@ -121,8 +121,8 @@ export default function EstadisticasScreen() {
             {stats.historial.length === 0 ? (
               <Text style={styles.emptyText}>Sin actividad registrada.</Text>
             ) : (
-              stats.historial.map((item, index) => (
-                <View key={index} style={styles.historyCard}>
+              stats.historial.map((item) => (
+                <View key={`${item.titulo}-${item.fecha}`} style={styles.historyCard}>
                   <View style={styles.historyImage}>
                     <MaterialCommunityIcons name="gavel" size={28} color="#CCCCCC" />
                   </View>

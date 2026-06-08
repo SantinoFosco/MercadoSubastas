@@ -38,7 +38,7 @@ def submit_articulo(db: Session, request: schemas.ArticuloSubmitRequest):
         categoria=request.categoria,
         procedencia=request.procedencia,
         declaracionLegal="si" if request.declaracionLegal else "no",
-        estado="publicado",
+        estado="borrador",
     )
     db.add(presentacion)
     db.flush()
