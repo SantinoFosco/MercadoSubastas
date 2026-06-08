@@ -14,6 +14,7 @@ export type AuctionState = {
   categoriaSubasta: string;
   productoId: number;
   itemCatalogoId: number;
+  numeroLote: number;
   precioBase: number;
   titulo: string;
   precioActual: number;
@@ -51,6 +52,7 @@ export function useAuctionWebSocket(subastaId: string | null, clienteId: number 
   const [auctionStartTime, setAuctionStartTime] = useState<string | null>(null);
   const [soldInfo, setSoldInfo] = useState<SoldInfo | null>(null);
   const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [connectionFailed, setConnectionFailed] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const soldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -77,6 +79,8 @@ export function useAuctionWebSocket(subastaId: string | null, clienteId: number 
         const delay = RETRY_BASE_MS * (retriesRef.current + 1);
         retriesRef.current += 1;
         retryTimerRef.current = setTimeout(connect, delay);
+      } else {
+        setConnectionFailed(true);
       }
     };
 
@@ -115,5 +119,5 @@ export function useAuctionWebSocket(subastaId: string | null, clienteId: number 
     };
   }, [connect]);
 
-  return { auctionState, isConnected, auctionEnded, auctionNotStarted, auctionStartTime, soldInfo, connectionError };
+  return { auctionState, isConnected, auctionEnded, auctionNotStarted, auctionStartTime, soldInfo, connectionError, connectionFailed };
 }

@@ -106,6 +106,9 @@ def create_tarjeta(db: Session, request: schemas.TarjetaCreate):
     marca_normalizada = request.marca.upper()
     if marca_normalizada not in {"VISA", "MASTERCARD", "AMEX"}:
         raise HTTPException(status_code=422, detail=f"Marca inválida '{request.marca}'. Permitidas: VISA, MASTERCARD, AMEX")
+    tipo_normalizado = request.tipoTarjeta.lower()
+    if tipo_normalizado not in {"credito", "debito"}:
+        raise HTTPException(status_code=422, detail=f"Tipo de tarjeta inválido '{request.tipoTarjeta}'. Permitidos: credito, debito")
     if request.vencimiento < date.today():
         raise HTTPException(status_code=422, detail="La tarjeta está vencida")
     try:
@@ -119,7 +122,7 @@ def create_tarjeta(db: Session, request: schemas.TarjetaCreate):
         nueva_tarjeta = models.mpTarjeta(
             medio_pago=nuevo_medio.identificador, titular=request.titular,
             ultimos_4_digitos=request.ultimos4Digitos, vencimiento=request.vencimiento,
-            marca=marca_normalizada, tipo_tarjeta=request.tipoTarjeta,
+            marca=marca_normalizada, tipo_tarjeta=tipo_normalizado,
         )
         db.add(nueva_tarjeta)
         db.commit()
@@ -129,7 +132,7 @@ def create_tarjeta(db: Session, request: schemas.TarjetaCreate):
             id=nuevo_medio.identificador, tipo=nuevo_medio.tipo, estado=nuevo_medio.estado,
             descripcion=nuevo_medio.descripcion, moneda=nuevo_medio.moneda, esInternacional=request.esInternacional,
             titular=nueva_tarjeta.titular, ultimos4Digitos=nueva_tarjeta.ultimos_4_digitos,
-            vencimiento=nueva_tarjeta.vencimiento, marca=nueva_tarjeta.marca, tipoTarjeta=nueva_tarjeta.tipo_tarjeta,
+            vencimiento=nueva_tarjeta.vencimiento, marca=nueva_tarjeta.marca, tipoTarjeta=tipo_normalizado,
         )
     except Exception as e:
         db.rollback()

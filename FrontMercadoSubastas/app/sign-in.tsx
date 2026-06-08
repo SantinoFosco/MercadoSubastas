@@ -15,7 +15,6 @@ export default function SignInScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [isCheckingStatus, setIsCheckingStatus] = useState(false);
 
   const handleLogin = async () => {
     if (!email.trim()) {
@@ -62,12 +61,6 @@ export default function SignInScreen() {
         return;
       }
 
-      // Usuario pendiente de verificación por empleado
-      if (data.estado === 'inactivo') {
-        setError('Tu cuenta está pendiente de verificación. Te notificaremos por mail cuando sea aprobada.');
-        return;
-      }
-
       // Usuario aprobado pero debe cambiar su clave temporal
       if (data.claveTemporal) {
         router.push({ pathname: '/register_final', params: { mail: email.trim(), clienteId: String(data.identificador) } });
@@ -76,14 +69,6 @@ export default function SignInScreen() {
 
       // Guardar sesión (incluye categoria para filtrar el home) y actualizar el contexto reactivo.
       await login(data);
-
-      // Usuario con registro rechazado: puede ingresar pero no operar
-      if (data.admitido === 'no') {
-        router.replace('/exploracion');
-        return;
-      }
-
-      // Usuario habilitado normalmente
       router.replace('/exploracion');
     } catch {
       setError('No se pudo conectar con el servidor. Verificá tu conexión a internet.');
@@ -92,34 +77,12 @@ export default function SignInScreen() {
     }
   };
 
-  const handleVerificarEstado = async () => {
+  const handleVerificarEstado = () => {
     if (!email.trim()) {
       setError('Ingresá tu mail para verificar el estado de tu registro.');
       return;
     }
-
-    setError('');
-    setIsCheckingStatus(true);
-    try {
-      const response = await fetch(API_ENDPOINTS.login, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mail: email.trim(), contrasenia: '' }),
-      });
-
-      // 401 = el usuario existe y tiene contraseña real → ya está verificado y activo
-      if (response.status === 401) {
-        Alert.alert('Mail ya registrado', 'Este mail ya se encuentra registrado en el sistema. Iniciá sesión con tu contraseña.');
-        return;
-      }
-
-      // Cualquier otro caso (403 pendiente, etc.) → llevar a la pantalla de verificación
-      router.push({ pathname: '/verification', params: { mail: email.trim() } });
-    } catch {
-      setError('No se pudo conectar con el servidor. Verificá tu conexión a internet.');
-    } finally {
-      setIsCheckingStatus(false);
-    }
+    router.push({ pathname: '/verification', params: { mail: email.trim() } });
   };
 
   const isFormValid = email.trim() && password.trim() && !isLoading;
@@ -242,17 +205,12 @@ export default function SignInScreen() {
 
         {/* LINK VERIFICACIÓN */}
         <View style={styles.verificationHint}>
-          {isCheckingStatus
-            ? <ActivityIndicator size={14} color="#8A6D3B" />
-            : <MaterialCommunityIcons name="clock-outline" size={14} color="#8A6D3B" />
-          }
+          <MaterialCommunityIcons name="clock-outline" size={14} color="#8A6D3B" />
           <Text style={styles.verificationHintText}>
             ¿Ya te registraste y esperás aprobación?{' '}
           </Text>
-          <Pressable onPress={handleVerificarEstado} disabled={isCheckingStatus}>
-            <Text style={styles.verificationHintLink}>
-              {isCheckingStatus ? 'Verificando…' : 'Verificar estado'}
-            </Text>
+          <Pressable onPress={handleVerificarEstado}>
+            <Text style={styles.verificationHintLink}>Verificar estado</Text>
           </Pressable>
         </View>
 

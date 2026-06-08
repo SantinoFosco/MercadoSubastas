@@ -72,6 +72,7 @@ def _vivo_to_dict(vivo: schemas.VivoSubasta) -> dict:
         "categoriaSubasta": vivo.categoriaSubasta,
         "productoId": vivo.productoId,
         "itemCatalogoId": vivo.itemCatalogoId,
+        "numeroLote": vivo.numeroLote,
         "precioBase": vivo.precioBase,
         "titulo": vivo.titulo,
         "precioActual": vivo.precioActual,
@@ -177,10 +178,10 @@ def get_subasta_en_vivo(db: Session, subasta_id: int):
     if not subasta:
         return None
 
-    # Barrera temporal: la subasta solo existe como "en vivo" si ya arrancó en hora Argentina.
-    ahora_ar = datetime.now(tz=_AR_TZ).replace(tzinfo=None)
+    # Barrera temporal: la subasta solo existe como "en vivo" si ya arrancó (fecha+hora en UTC).
+    ahora_utc = datetime.now(timezone.utc).replace(tzinfo=None)
     inicio = datetime.combine(subasta.fecha, subasta.hora)
-    if subasta.estado != "abierta" or inicio > ahora_ar:
+    if subasta.estado != "abierta" or inicio > ahora_utc:
         return None
 
     catalogo = db.query(models.Catalogo).filter(models.Catalogo.subasta == subasta_id).first()
@@ -188,12 +189,15 @@ def get_subasta_en_vivo(db: Session, subasta_id: int):
         return None
 
     # Primer ítem aún no subastado = el que se subasta ahora
-    item_actual = db.query(models.ItemCatalogo).filter(
+    todos_items = db.query(models.ItemCatalogo).filter(
         models.ItemCatalogo.catalogo == catalogo.identificador,
-        models.ItemCatalogo.subastado == "no",
-    ).order_by(models.ItemCatalogo.identificador).first()
+    ).order_by(models.ItemCatalogo.identificador).all()
+    item_actual = next((it for it in todos_items if it.subastado == "no"), None)
     if not item_actual:
         return None
+    numero_lote = next(
+        (i + 1 for i, it in enumerate(todos_items) if it.identificador == item_actual.identificador), 1
+    )
 
     pp = db.query(models.ProductoPresentacion).filter(
         models.ProductoPresentacion.producto == item_actual.producto
@@ -204,14 +208,7 @@ def get_subasta_en_vivo(db: Session, subasta_id: int):
     precio_actual = float(max_puja) if max_puja else precio_base
     pujas_totales = db.query(models.Pujo).filter(models.Pujo.item == item_actual.identificador).count()
 
-    subasta_dt = datetime.combine(subasta.fecha, subasta.hora)
-    delta = subasta_dt - datetime.now()
-    if delta.total_seconds() > 0:
-        h, rem = divmod(int(delta.total_seconds()), 3600)
-        m, s = divmod(rem, 60)
-        tiempo_restante = f"{h:02d}:{m:02d}:{s:02d}"
-    else:
-        tiempo_restante = "00:00:00"
+    tiempo_restante = "00:00:00"  # La subasta ya arrancó; este campo es informativo
 
     incrementos = [round(precio_base * p, 2) for p in (0.01, 0.05, 0.10)]
     prox_puja = round(precio_actual + incrementos[0], 2)
@@ -234,13 +231,14 @@ def get_subasta_en_vivo(db: Session, subasta_id: int):
             pujaId=h.identificador,
             nombreComprador=persona.nombre if persona else "Desconocido",
             nombreProducto=pp.titulo if pp else "Desconocido",
-            fecha=h.fechaHora,
+            fecha=h.fechaHora.replace(tzinfo=timezone.utc),
             valor=f"${h.importe:,.2f}",
         ))
 
     return schemas.VivoSubasta(
         subastaId=subasta_id, categoriaSubasta=subasta.categoria,
         productoId=item_actual.producto, itemCatalogoId=item_actual.identificador,
+        numeroLote=numero_lote,
         precioBase=precio_base, titulo=pp.titulo if pp else "Sin título",
         precioActual=precio_actual, proximaPuja=prox_puja, pujaMaxima=puja_maxima,
         tiempoRestante=tiempo_restante, imagen=get_foto_b64(db, item_actual.producto),
@@ -337,7 +335,7 @@ def create_pujo(db: Session, request: schemas.PujoRequest):
         nuevo_historial = models.HistorialPujos(
             pujo=nuevo_pujo.identificador, asistente=request.asistenteId,
             itemCatalogo=request.itemId, cliente=asistente.cliente,
-            subasta=asistente.subasta, importe=request.importe, fechaHora=datetime.now(),
+            subasta=asistente.subasta, importe=request.importe, fechaHora=datetime.now(timezone.utc).replace(tzinfo=None),
         )
         db.add(nuevo_historial)
         db.commit()
@@ -354,6 +352,10 @@ def create_pujo(db: Session, request: schemas.PujoRequest):
         db.rollback()
         raise e
 
+
+# Ubicación única de la subasta de prueba (seed). Su timer NO se arranca
+# automáticamente: solo cuando el primer usuario se conecta por WebSocket.
+_SEED_UBICACION_VIVO = "Salón EN VIVO, Av. Alvear 1440, CABA"
 
 # ── Cierre automático de ítems ────────────────────────────────────────────────
 
@@ -395,6 +397,8 @@ async def _cerrar_item(item_id: int, subasta_id: int):
         else:
             # F4: nadie pujó → la empresa compra por el precio base
             empresa_persona = db.query(models.Persona).filter(models.Persona.documento == "00000000").first()
+            if not empresa_persona:
+                print(f"[F4] ADVERTENCIA: Persona empresa (doc 00000000) no encontrada. Item {item_id} cerrado sin RegistroSubasta.")
             empresa_cliente = db.query(models.Cliente).filter(
                 models.Cliente.identificador == empresa_persona.identificador
             ).first() if empresa_persona else None
@@ -441,6 +445,27 @@ async def _cerrar_item(item_id: int, subasta_id: int):
         _item_timers.pop(item_id, None)
 
 
+async def _arrancar_subasta_en_hora(subasta_id: int, delay_segundos: float):
+    """Duerme hasta la hora de inicio de la subasta y arranca el timer del primer ítem."""
+    if delay_segundos > 0:
+        await asyncio.sleep(delay_segundos)
+    db = SessionLocal()
+    try:
+        s = db.query(models.Subasta).filter(models.Subasta.identificador == subasta_id).first()
+        if not s or s.estado != "abierta":
+            return
+        vivo = get_subasta_en_vivo(db, subasta_id)
+        if vivo and (vivo.itemCatalogoId not in _item_timers or _item_timers[vivo.itemCatalogoId].done()):
+            _item_timers[vivo.itemCatalogoId] = asyncio.create_task(
+                _cerrar_item(vivo.itemCatalogoId, subasta_id)
+            )
+            print(f"[schedule] Timer iniciado para ítem {vivo.itemCatalogoId} (subasta {subasta_id})")
+    except Exception as e:
+        print(f"[schedule] Error: {e}")
+    finally:
+        db.close()
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("/subastas/", response_model=list[schemas.SubastaResponse])
@@ -448,8 +473,12 @@ def ep_get_subastas(db: Session = Depends(get_db)):
     return get_subastas(db)
 
 @router.post("/subastas/", response_model=schemas.SubastaResponse, status_code=201)
-def ep_create_subasta(request: schemas.SubastaCreate, db: Session = Depends(get_db)):
-    return create_subasta(db, request)
+async def ep_create_subasta(request: schemas.SubastaCreate, db: Session = Depends(get_db)):
+    nuevo = create_subasta(db, request)
+    ahora = datetime.now(timezone.utc).replace(tzinfo=None)
+    delay = (datetime.combine(request.fecha, request.hora) - ahora).total_seconds()
+    asyncio.create_task(_arrancar_subasta_en_hora(nuevo.identificador, delay))
+    return nuevo
 
 @router.delete("/subastas/{subasta_id}")
 def ep_delete_subasta(subasta_id: int, db: Session = Depends(get_db)):
@@ -528,9 +557,9 @@ async def ws_subasta(
             # Distinguir entre "aún no arrancó" y "ya terminó" para dar feedback correcto al cliente.
             subasta_obj = db.query(models.Subasta).filter(models.Subasta.identificador == subasta_id).first()
             if subasta_obj:
-                ahora_ar = datetime.now(tz=_AR_TZ).replace(tzinfo=None)
+                ahora_utc = datetime.now(timezone.utc).replace(tzinfo=None)
                 inicio = datetime.combine(subasta_obj.fecha, subasta_obj.hora)
-                if subasta_obj.estado == "abierta" and inicio > ahora_ar:
+                if subasta_obj.estado == "abierta" and inicio > ahora_utc:
                     await websocket.send_text(json.dumps({
                         "type": "auction_not_started",
                         "data": {"subastaId": subasta_id, "inicio": inicio.isoformat()},

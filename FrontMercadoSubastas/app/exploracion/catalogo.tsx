@@ -30,16 +30,25 @@ function formatCurrency(amount: number): string {
   return `$${amount.toLocaleString('es-AR')}`;
 }
 
+const CATEGORIA_ORDER: Record<string, number> = {
+  comun: 0, especial: 1, plata: 2, oro: 3, platino: 4,
+};
+
+function puedeAcceder(categoriaSubasta: string | null, categoriaUsuario: string | undefined): boolean {
+  if (!categoriaSubasta || !categoriaUsuario) return false;
+  return (CATEGORIA_ORDER[categoriaUsuario] ?? 0) >= (CATEGORIA_ORDER[categoriaSubasta] ?? 0);
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function CatalogoScreen() {
   const router = useRouter();
-  const { subastaId } = useLocalSearchParams<{ subastaId: string }>();
-  const { session, getCategoria } = useSession();
+  const { subastaId, enVivo: enVivoParam } = useLocalSearchParams<{ subastaId: string; enVivo: string }>();
+  const { session } = useSession();
   const isLoggedIn = !!session;
 
   const [lots, setLots] = useState<ProductoCatalogo[]>([]);
-  const [isEnVivo, setIsEnVivo] = useState(false);
+  const [isEnVivo, setIsEnVivo] = useState(enVivoParam === 'true');
   const [subastaInfo, setSubastaInfo] = useState<SubastaInfo>({ fecha: null, categoria: null });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -52,11 +61,10 @@ export default function CatalogoScreen() {
     }
     setLoading(true);
     setError('');
-    setIsEnVivo(false);
     try {
-      const [catalogoRes, homeRes] = await Promise.all([
+      const [catalogoRes, infoRes] = await Promise.all([
         fetch(API_ENDPOINTS.catalogoSubasta(subastaId)),
-        fetch(API_ENDPOINTS.home(getCategoria())),
+        fetch(API_ENDPOINTS.subastaInfo(subastaId)),
       ]);
 
       if (!catalogoRes.ok) {
@@ -67,24 +75,17 @@ export default function CatalogoScreen() {
       const json: ProductoCatalogo[] = await catalogoRes.json();
       setLots(json);
 
-      if (homeRes.ok) {
-        const homeData = await homeRes.json();
-        const id = parseInt(subastaId, 10);
-        const destacada = homeData.subastaDestacada;
-        const generales: any[] = homeData.subastasGenerales ?? [];
-        const todas = [...(destacada ? [destacada] : []), ...generales];
-        const match = todas.find((s) => s.subastaId === id);
-        if (match) {
-          setIsEnVivo(match.enVivo === true);
-          setSubastaInfo({ fecha: new Date(match.fecha), categoria: match.categoria });
-        }
+      if (infoRes.ok) {
+        const info = await infoRes.json();
+        setIsEnVivo(info.enVivo === true);
+        setSubastaInfo({ fecha: new Date(info.fecha), categoria: info.categoria });
       }
     } catch {
       setError('No se pudo cargar el catálogo. Verificá tu conexión.');
     } finally {
       setLoading(false);
     }
-  }, [subastaId, getCategoria]);
+  }, [subastaId]);
 
   useEffect(() => { fetchCatalogo(); }, [fetchCatalogo]);
 
@@ -119,17 +120,22 @@ export default function CatalogoScreen() {
       {/* Description */}
       <Text style={styles.productDescription}>{lot.descripcionCorta}</Text>
 
-      {/* Price */}
+      {/* Price — solo visible para usuarios registrados (enunciado línea 35) */}
       <View style={styles.priceRow}>
         <View style={styles.priceColumn}>
           <Text style={styles.priceLabel}>PRECIO BASE</Text>
-          <Text style={styles.priceValue}>{formatCurrency(lot.precioBase)}</Text>
+          {isLoggedIn ? (
+            <Text style={styles.priceValue}>{formatCurrency(lot.precioBase)}</Text>
+          ) : (
+            <Text style={styles.priceHidden}>Iniciá sesión para ver el precio</Text>
+          )}
         </View>
       </View>
 
       {/* Details button */}
       <TouchableOpacity
         style={[styles.detailsButton, lot.subastado === 'si' && styles.detailsButtonDisabled]}
+        disabled={lot.subastado === 'si'}
         activeOpacity={0.7}
         onPress={() => router.push({
           pathname: '/exploracion/detalle-lote',
@@ -199,30 +205,38 @@ export default function CatalogoScreen() {
           )}
 
           {/* ── Botón En Vivo ───────────────────────────────────────── */}
-          {isEnVivo && isLoggedIn && (
-            <TouchableOpacity
-              style={styles.liveButton}
-              activeOpacity={0.85}
-              onPress={() => router.push({
-                pathname: '/exploracion/subasta-vivo',
-                params: { subastaId: subastaId ?? '' },
-              })}
-            >
-              <View style={styles.liveButtonDot} />
-              <MaterialCommunityIcons name="broadcast" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
-              <Text style={styles.liveButtonText}>ENTRAR EN VIVO · PUJAR AHORA</Text>
-            </TouchableOpacity>
-          )}
-          {isEnVivo && !isLoggedIn && (
-            <TouchableOpacity
-              style={styles.liveButtonGuest}
-              activeOpacity={0.85}
-              onPress={() => router.push('/sign-in')}
-            >
-              <MaterialCommunityIcons name="lock-outline" size={18} color="#8A6D3B" style={{ marginRight: 8 }} />
-              <Text style={styles.liveButtonGuestText}>INICIÁ SESIÓN PARA PARTICIPAR EN VIVO</Text>
-            </TouchableOpacity>
-          )}
+          {isEnVivo && (() => {
+            if (!isLoggedIn) {
+              return (
+                <TouchableOpacity style={styles.liveButtonGuest} activeOpacity={0.85} onPress={() => router.push('/sign-in')}>
+                  <MaterialCommunityIcons name="lock-outline" size={18} color="#8A6D3B" style={{ marginRight: 8 }} />
+                  <Text style={styles.liveButtonGuestText}>INICIÁ SESIÓN PARA PARTICIPAR EN VIVO</Text>
+                </TouchableOpacity>
+              );
+            }
+            if (!puedeAcceder(subastaInfo.categoria, session?.categoria)) {
+              const cat = subastaInfo.categoria ?? '';
+              return (
+                <View style={styles.liveButtonLocked}>
+                  <MaterialCommunityIcons name="lock-outline" size={18} color="#8A6D3B" style={{ marginRight: 8 }} />
+                  <Text style={styles.liveButtonLockedText}>
+                    NECESITÁS CATEGORÍA {cat.toUpperCase()} PARA PARTICIPAR
+                  </Text>
+                </View>
+              );
+            }
+            return (
+              <TouchableOpacity
+                style={styles.liveButton}
+                activeOpacity={0.85}
+                onPress={() => router.push({ pathname: '/exploracion/subasta-vivo', params: { subastaId: subastaId ?? '' } })}
+              >
+                <View style={styles.liveButtonDot} />
+                <MaterialCommunityIcons name="broadcast" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
+                <Text style={styles.liveButtonText}>ENTRAR EN VIVO · PUJAR AHORA</Text>
+              </TouchableOpacity>
+            );
+          })()}
 
           {lots.length === 0 ? (
             <Text style={styles.emptyText}>Este catálogo no tiene productos aún.</Text>
@@ -449,5 +463,30 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     letterSpacing: 0.5,
+  },
+  liveButtonLocked: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFF8E1',
+    borderRadius: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    marginBottom: 24,
+    borderWidth: 1.5,
+    borderColor: '#FFD700',
+  },
+  liveButtonLockedText: {
+    color: '#8A6D3B',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    flexShrink: 1,
+  },
+  priceHidden: {
+    fontSize: 13,
+    color: '#8A6D3B',
+    fontStyle: 'italic',
+    fontWeight: '500',
   },
 });

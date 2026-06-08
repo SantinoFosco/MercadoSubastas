@@ -117,6 +117,8 @@ def confirmar_envio(db: Session, subasta_id: int, usuario_id: int, metodo_envio:
         models.RegistroSubasta.subasta == subasta_id,
         models.RegistroSubasta.cliente == usuario_id,
     ).all()
+    if not registros:
+        return None
     for r in registros:
         r.metodo_envio = metodo_envio
         r.costo_envio = costo

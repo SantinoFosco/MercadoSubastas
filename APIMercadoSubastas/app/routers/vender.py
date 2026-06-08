@@ -11,7 +11,7 @@ router = APIRouter(tags=["Vender / Artículos"])
 # ── CRUD ─────────────────────────────────────────────────────────────────────
 
 def submit_articulo(db: Session, request: schemas.ArticuloSubmitRequest):
-    empleado = db.query(models.Empleado).first()
+    empleado = db.query(models.Empleado).order_by(models.Empleado.identificador).first()
     if not empleado:
         raise HTTPException(status_code=503, detail="No hay empleados configurados en el sistema")
     empleado_id = empleado.identificador

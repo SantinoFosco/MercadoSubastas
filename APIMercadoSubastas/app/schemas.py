@@ -185,6 +185,7 @@ class VivoSubasta(BaseModel):
     categoriaSubasta: str
     productoId: int
     itemCatalogoId: int
+    numeroLote: int
     precioBase: float
     titulo: str
     precioActual: float

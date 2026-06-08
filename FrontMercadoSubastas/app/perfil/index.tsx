@@ -79,7 +79,7 @@ export default function PerfilScreen() {
 
   const handleLogout = () => {
     logout();
-    router.replace('/login');
+    router.replace('/exploracion');
   };
 
   const fields = profile

@@ -86,7 +86,7 @@ export default function SubastaVivoScreen() {
   }, [clienteId]);
 
   // ── WebSocket — estado en tiempo real ───────────────────────────────────────
-  const { auctionState, isConnected, auctionEnded, auctionNotStarted, auctionStartTime, soldInfo, connectionError } =
+  const { auctionState, isConnected, auctionEnded, auctionNotStarted, auctionStartTime, soldInfo, connectionError, connectionFailed } =
     useAuctionWebSocket(subastaId ?? null, clienteId);
 
   // Rastrear si el usuario ganó al menos un ítem (para redirigir al cierre)
@@ -262,7 +262,7 @@ export default function SubastaVivoScreen() {
           </View>
 
           <View style={styles.heroOverlay}>
-            <Text style={styles.heroLotLabel}>LOTE #{auctionState?.itemCatalogoId ?? '...'}</Text>
+            <Text style={styles.heroLotLabel}>LOTE #{auctionState?.numeroLote ?? '...'}</Text>
             <Text style={styles.heroTitle}>{titulo}</Text>
           </View>
 
@@ -359,6 +359,18 @@ export default function SubastaVivoScreen() {
                   Para pujar necesitás al menos un medio de pago verificado por la casa de subastas.
                 </Text>
               </View>
+            </View>
+          </View>
+        )}
+
+        {/* Error de conexión WebSocket agotada */}
+        {connectionFailed && (
+          <View style={[styles.section, { marginTop: 0, marginBottom: 10 }]}>
+            <View style={styles.errorBanner}>
+              <MaterialCommunityIcons name="wifi-off" size={18} color="#D32F2F" />
+              <Text style={styles.errorBannerText}>
+                Se perdió la conexión en vivo. Salí y volvé a entrar para reconectar.
+              </Text>
             </View>
           </View>
         )}

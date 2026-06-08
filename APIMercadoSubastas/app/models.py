@@ -34,7 +34,7 @@ class PersonaDetalle(Base):
     __tablename__ = "personas_detalle"
 
     identificador = Column(Integer, primary_key=True, index=True)
-    persona = Column(Integer, ForeignKey("personas.identificador"), nullable=False)
+    persona = Column(Integer, ForeignKey("personas.identificador"), nullable=False, unique=True)
     pais = Column(Integer, ForeignKey("paises.numero"), nullable=False)
     mail = Column(String, nullable=False, unique=True)
     contrasenia = Column(String, nullable=False)

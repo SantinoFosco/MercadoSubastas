@@ -150,7 +150,7 @@ def seed_subastas():
         # Subastas
         hoy = date.today()
         subasta_1 = models.Subasta(
-            fecha=hoy, hora=time(20, 0), estado="abierta",
+            fecha=hoy + timedelta(days=1), hora=time(20, 0), estado="abierta",
             subastador=subastador.identificador, ubicacion="Salón Principal, Av. Alvear 1440, CABA",
             capacidadAsistentes=100, tieneDeposito="si", seguridadPropia="si", categoria="comun",
         )
@@ -386,7 +386,7 @@ def seed_historial_prueba():
                 .all()
             )
 
-        from datetime import datetime as _dt, timedelta as _td
+        from datetime import datetime as _dt, timedelta as _td, timezone as _tz_utc
         items_s1 = items_de_subasta(subasta_1.identificador)
         items_s2 = items_de_subasta(subasta_2.identificador)
 
@@ -406,8 +406,9 @@ def seed_historial_prueba():
                 pujo=pujo.identificador, asistente=asistente_1.identificador,
                 itemCatalogo=item.identificador, cliente=cliente_id,
                 subasta=subasta_1.identificador, importe=importe,
-                fechaHora=_dt.now() - _td(days=20 - i),
+                fechaHora=_dt.now(tz=_tz_utc.utc).replace(tzinfo=None) - _td(days=20 - i),
             ))
+            item.subastado = "si"
             if ganador == "si":
                 producto = db.query(models.Producto).filter(models.Producto.identificador == item.producto).first()
                 db.add(models.RegistroSubasta(
@@ -426,8 +427,9 @@ def seed_historial_prueba():
                 pujo=pujo.identificador, asistente=asistente_2.identificador,
                 itemCatalogo=item.identificador, cliente=cliente_id,
                 subasta=subasta_2.identificador, importe=importe,
-                fechaHora=_dt.now() - _td(days=5 - i),
+                fechaHora=_dt.now(tz=_tz_utc.utc).replace(tzinfo=None) - _td(days=5 - i),
             ))
+            item.subastado = "si"
             if ganador == "si":
                 producto = db.query(models.Producto).filter(models.Producto.identificador == item.producto).first()
                 db.add(models.RegistroSubasta(
@@ -528,7 +530,7 @@ def seed_compras_prueba():
                 pujo=pujo_ganador.identificador, asistente=asistente.identificador,
                 itemCatalogo=item.identificador, cliente=cliente_id,
                 subasta=subasta.identificador, importe=pujo_ganador.importe,
-                fechaHora=__import__("datetime").datetime.now(),
+                fechaHora=__import__("datetime").datetime.now(__import__("datetime").timezone.utc).replace(tzinfo=None),
             ))
 
             # Registrar venta
@@ -784,13 +786,29 @@ def seed_articulos_vendedor():
 
 
 def seed_subasta_en_vivo():
-    """Crea una subasta que ya comenzó (fecha = ayer) para poder probar el modo EN VIVO."""
+    """Crea o resetea la subasta de prueba EN VIVO.
+
+    Siempre resetea el estado cada vez que se corre (incluyendo al arrancar el servidor
+    desde main.py). La fecha y hora de inicio se calculan dinámicamente como
+    "hace 5 minutos en hora Argentina", de forma que:
+    - La subasta siempre aparece como EN VIVO al momento de correr el seed
+    - El horario mostrado en la UI refleja la hora real del docker compose
+    - Las subastas anteriores con fecha pasada no aparecen como "en vivo"
+      porque sus ítems ya estarán cerrados o tendrán estado != "abierta"
+    """
+    from datetime import datetime as _dt, timezone as _tz, timedelta as _tdd
+
+    _UBICACION_VIVO = "Salón EN VIVO, Av. Alvear 1440, CABA"
+    _UTC = _tz(_tdd(hours=0))
+
+    # Calcular fecha y hora de inicio en UTC: hace 5 minutos
+    _ahora_utc = _dt.now(tz=_UTC).replace(tzinfo=None)
+    _inicio_utc = _ahora_utc - _tdd(minutes=5)
+    fecha_inicio = _inicio_utc.date()
+    hora_inicio  = _inicio_utc.time().replace(second=0, microsecond=0)
+
     db = SessionLocal()
     try:
-        if db.query(models.Persona).filter(models.Persona.documento == "00000010").first():
-            print("✓ Subasta en vivo ya existe, se omite")
-            return
-
         p_sub = db.query(models.Persona).filter(models.Persona.documento == "00000001").first()
         if not p_sub:
             print("✗ Subastador no encontrado. Corré seed_subastas() primero.")
@@ -800,55 +818,152 @@ def seed_subasta_en_vivo():
         ).first().identificador
 
         p_due = db.query(models.Persona).filter(models.Persona.documento == "00000002").first()
+        if not p_due:
+            print("✗ Dueño no encontrado. Corré seed_subastas() primero.")
+            return
         duenio_id = p_due.identificador
 
-        ayer = date.today() - timedelta(days=1)
-        subasta = models.Subasta(
-            fecha=ayer, hora=time(20, 0), estado="abierta",
-            subastador=subastador_id, ubicacion="Salón EN VIVO, Av. Alvear 1440, CABA",
-            capacidadAsistentes=100, tieneDeposito="si", seguridadPropia="si", categoria="comun",
-        )
-        db.add(subasta)
-        db.flush()
+        # ── Detectar subasta existente por ubicación única ─────────────────────
+        subasta_existente = db.query(models.Subasta).filter(
+            models.Subasta.ubicacion == _UBICACION_VIVO
+        ).first()
 
-        catalogo = models.Catalogo(
-            descripcion="Subasta en Vivo — Lote de Prueba",
-            subasta=subasta.identificador, responsable=1,
-        )
-        db.add(catalogo)
-        db.flush()
-
-        productos_vivo = [
-            ("Reloj de Bolsillo Suizo — Siglo XIX", "Reloj de bolsillo suizo, circa 1890, caja de plata maciza, movimiento de 17 rubíes.", "Relojes y Joyería", "Suiza", 150000, 10, "reloj.jpg"),
-            ("Jarrón de Porcelana China — Dinastía Ming", "Jarrón de porcelana china de la dinastía Ming, circa 1400, decoración floral en azul y blanco, 42 cm.", "Arte Oriental", "China", 320000, 10, "jarron.jpg"),
-            ("Bodegón Flamenco — Escuela del XVII", "Pintura al óleo sobre lienzo, escuela flamenca, siglo XVII, bodegón con frutas y animales, 80x60 cm.", "Pintura y Arte", "Países Bajos", 280000, 12, "oilPainitng.jpg"),
-        ]
-
-        for desc_corta, desc_larga, cat_pp, procedencia, precio, comision, img in productos_vivo:
-            producto = models.Producto(
-                descripcionCatalogo=desc_corta, descripcionCompleta=desc_larga,
-                revisor=1, duenio=duenio_id, disponible="si",
+        if subasta_existente:
+            subasta_id = subasta_existente.identificador
+            catalogo = db.query(models.Catalogo).filter(
+                models.Catalogo.subasta == subasta_id
+            ).first()
+            items = (
+                db.query(models.ItemCatalogo)
+                .filter(models.ItemCatalogo.catalogo == catalogo.identificador)
+                .order_by(models.ItemCatalogo.identificador)
+                .all()
+                if catalogo else []
             )
-            db.add(producto)
-            db.flush()
-            db.add(models.ProductoPresentacion(
-                producto=producto.identificador, titulo=desc_corta, categoria=cat_pp,
-                procedencia=procedencia, declaracionLegal="si", estado="publicado",
-            ))
-            db.add(models.Foto(producto=producto.identificador, foto=_load_foto(img)))
-            db.add(models.ItemCatalogo(
-                catalogo=catalogo.identificador, producto=producto.identificador,
-                precioBase=precio, comision=comision, subastado="no",
-            ))
-            db.flush()
-            db.add(models.AceptacionArticulo(producto=producto.identificador, estado="pendiente"))
+            item_ids = [it.identificador for it in items]
 
-        # Marcador para detectar que ya se creó
-        p_marker = models.Persona(nombre="Marker Vivo", documento="00000010", direccion="-", estado="activo")
-        db.add(p_marker)
+            # Limpiar en orden para respetar FK: historial → pujos → asistentes
+            if item_ids:
+                db.query(models.HistorialPujos).filter(
+                    models.HistorialPujos.itemCatalogo.in_(item_ids)
+                ).delete(synchronize_session=False)
+                db.query(models.Pujo).filter(
+                    models.Pujo.item.in_(item_ids)
+                ).delete(synchronize_session=False)
+            db.query(models.Asistente).filter(
+                models.Asistente.subasta == subasta_id
+            ).delete(synchronize_session=False)
+
+            # Resetear ítems y actualizar fecha/hora al momento actual
+            for it in items:
+                it.subastado = "no"
+            subasta_existente.estado = "abierta"
+            subasta_existente.fecha = fecha_inicio
+            subasta_existente.hora  = hora_inicio
+            db.flush()
+
+            subasta = subasta_existente
+            primer_item = items[0] if items else None
+            accion = "RESETEADA"
+        else:
+            # ── Crear subasta fresca ───────────────────────────────────────────
+            subasta = models.Subasta(
+                fecha=fecha_inicio, hora=hora_inicio, estado="abierta",
+                subastador=subastador_id, ubicacion=_UBICACION_VIVO,
+                capacidadAsistentes=100, tieneDeposito="si", seguridadPropia="si", categoria="comun",
+            )
+            db.add(subasta)
+            db.flush()
+
+            catalogo = models.Catalogo(
+                descripcion="Subasta en Vivo — Lote de Prueba",
+                subasta=subasta.identificador, responsable=1,
+            )
+            db.add(catalogo)
+            db.flush()
+
+            productos_vivo = [
+                ("Reloj de Bolsillo Suizo — Siglo XIX",       "Reloj de bolsillo suizo, circa 1890, caja de plata maciza, movimiento de 17 rubíes.",                  "Relojes y Joyería", "Suiza",        150000, 10, "reloj.jpg"),
+                ("Jarrón de Porcelana China — Dinastía Ming",  "Jarrón de porcelana china de la dinastía Ming, circa 1400, decoración floral en azul y blanco, 42 cm.", "Arte Oriental",     "China",        320000, 10, "jarron.jpg"),
+                ("Bodegón Flamenco — Escuela del XVII",        "Pintura al óleo sobre lienzo, escuela flamenca, siglo XVII, bodegón con frutas y animales, 80x60 cm.", "Pintura y Arte",    "Países Bajos", 280000, 12, "oilPainitng.jpg"),
+            ]
+
+            primer_item = None
+            for desc_corta, desc_larga, cat_pp, procedencia, precio, comision, img in productos_vivo:
+                producto = models.Producto(
+                    descripcionCatalogo=desc_corta, descripcionCompleta=desc_larga,
+                    revisor=1, duenio=duenio_id, disponible="si",
+                )
+                db.add(producto)
+                db.flush()
+                db.add(models.ProductoPresentacion(
+                    producto=producto.identificador, titulo=desc_corta, categoria=cat_pp,
+                    procedencia=procedencia, declaracionLegal="si", estado="publicado",
+                ))
+                db.add(models.Foto(producto=producto.identificador, foto=_load_foto(img)))
+                item = models.ItemCatalogo(
+                    catalogo=catalogo.identificador, producto=producto.identificador,
+                    precioBase=precio, comision=comision, subastado="no",
+                )
+                db.add(item)
+                db.flush()
+                if primer_item is None:
+                    primer_item = item
+                db.add(models.AceptacionArticulo(producto=producto.identificador, estado="pendiente"))
+            accion = "creada"
+
+        # ── Recrear asistentes y pujas iniciales para el primer ítem ──────────
+        usuario_prueba = db.query(models.PersonaDetalle).filter(
+            models.PersonaDetalle.mail == "prueba@test.com"
+        ).first()
+        usuario_2 = db.query(models.PersonaDetalle).filter(
+            models.PersonaDetalle.mail == "prueba2@test.com"
+        ).first()
+
+        if primer_item and usuario_prueba and usuario_2:
+            asistente_vivo_1 = models.Asistente(
+                numeroPostor=1, cliente=usuario_prueba.persona, subasta=subasta.identificador
+            )
+            asistente_vivo_2 = models.Asistente(
+                numeroPostor=2, cliente=usuario_2.persona, subasta=subasta.identificador
+            )
+            db.add(asistente_vivo_1)
+            db.add(asistente_vivo_2)
+            db.flush()
+
+            base = float(primer_item.precioBase)
+            _ahora_utc = _dt.now(tz=_tz(_tdd(hours=0))).replace(tzinfo=None)
+            bids_iniciales = [
+                (asistente_vivo_1, round(base * 1.01, 2), _ahora_utc - _tdd(minutes=4)),
+                (asistente_vivo_2, round(base * 1.03, 2), _ahora_utc - _tdd(minutes=3)),
+                (asistente_vivo_1, round(base * 1.05, 2), _ahora_utc - _tdd(minutes=2)),
+                (asistente_vivo_2, round(base * 1.08, 2), _ahora_utc - _tdd(minutes=1)),
+            ]
+            for i, (asistente_bid, importe, fechaHora) in enumerate(bids_iniciales):
+                ganador = "si" if i == len(bids_iniciales) - 1 else "no"
+                pujo = models.Pujo(
+                    asistente=asistente_bid.identificador,
+                    item=primer_item.identificador,
+                    importe=importe,
+                    ganador=ganador,
+                )
+                db.add(pujo)
+                db.flush()
+                db.add(models.HistorialPujos(
+                    pujo=pujo.identificador,
+                    asistente=asistente_bid.identificador,
+                    itemCatalogo=primer_item.identificador,
+                    cliente=asistente_bid.cliente,
+                    subasta=subasta.identificador,
+                    importe=importe,
+                    fechaHora=fechaHora,
+                ))
 
         db.commit()
-        print(f"✓ Subasta en vivo creada (fecha=ayer, id={subasta.identificador}) — aparece con badge EN VIVO")
+        hora_str = hora_inicio.strftime("%H:%M")
+        print(f"✓ Subasta en vivo {accion} (id={subasta.identificador}) — inicio: {fecha_inicio} {hora_str} AR")
+        print(f"  Usuarios: prueba@test.com / Prueba1.  |  prueba2@test.com / Prueba2.")
+        print(f"  3 lotes listos. Si nadie puja en {30}s por ítem, la empresa compra al precio base (F4).")
     except Exception as e:
         db.rollback()
         raise e

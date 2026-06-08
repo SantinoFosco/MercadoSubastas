@@ -17,10 +17,6 @@ const SESSION_KEY = 'user_session';
 let _session: UserSession | null = null;
 
 export const SessionStore = {
-  get(): UserSession | null {
-    return _session;
-  },
-
   getCategoria(): Categoria {
     return _session?.categoria ?? 'comun';
   },

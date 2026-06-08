@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone, timedelta
@@ -14,12 +14,27 @@ from ..utils import get_foto_b64, CATEGORIA_ORDER
 router = APIRouter(tags=["Catálogo y Productos"])
 
 
-def get_home(db: Session, categoria: str) -> schemas.HomeResponse:
-    nivel_usuario = CATEGORIA_ORDER.get(categoria.lower(), 0)
-    cats_accesibles = [k for k, v in CATEGORIA_ORDER.items() if v <= nivel_usuario]
+def _en_vivo(subasta, db: Session) -> bool:
+    """True si la subasta está activa ahora (fecha+hora en UTC) y tiene ítems sin subastar."""
+    ahora = datetime.now(timezone.utc).replace(tzinfo=None)
+    inicio = datetime.combine(subasta.fecha, subasta.hora)
+    if subasta.estado != "abierta" or inicio > ahora:
+        return False
+    cat = db.query(models.Catalogo).filter(models.Catalogo.subasta == subasta.identificador).first()
+    if not cat:
+        return False
+    return db.query(models.ItemCatalogo).filter(
+        models.ItemCatalogo.catalogo == cat.identificador,
+        models.ItemCatalogo.subastado == "no",
+    ).count() > 0
+
+
+def get_home(db: Session) -> schemas.HomeResponse:
+    # Los catálogos son públicos; el acceso a la sala en vivo se restringe por
+    # categoría en el endpoint registrarAsistente. Aquí se devuelven todas las
+    # subastas abiertas para que el usuario pueda ver el catálogo de cualquiera.
     subastas = db.query(models.Subasta).filter(
         models.Subasta.estado == "abierta",
-        models.Subasta.categoria.in_(cats_accesibles),
     ).order_by(models.Subasta.fecha, models.Subasta.hora).all()
 
     if not subastas:
@@ -36,45 +51,48 @@ def get_home(db: Session, categoria: str) -> schemas.HomeResponse:
         item = db.query(models.ItemCatalogo).filter(models.ItemCatalogo.catalogo == cat.identificador).first()
         return item.producto if item else None
 
-    def _en_vivo(subasta) -> bool:
-        # datetime.now(_AR_TZ).replace(tzinfo=None) gives the current naive
-        # Argentina time, so the comparison with the stored naive hora is correct
-        # regardless of the server/Docker timezone.
-        ahora = datetime.now(tz=_AR_TZ).replace(tzinfo=None)
-        inicio = datetime.combine(subasta.fecha, subasta.hora)
-        if subasta.estado != "abierta" or inicio > ahora:
-            return False
-        cat = db.query(models.Catalogo).filter(models.Catalogo.subasta == subasta.identificador).first()
-        if not cat:
-            return False
-        return db.query(models.ItemCatalogo).filter(
-            models.ItemCatalogo.catalogo == cat.identificador,
-            models.ItemCatalogo.subastado == "no",
-        ).count() > 0
+    # Priorizar subasta en vivo como destacada; si no hay ninguna, usar la próxima por fecha.
+    dest_idx = next((i for i, s in enumerate(subastas) if _en_vivo(s, db)), 0)
+    dest = subastas[dest_idx]
 
-    dest = subastas[0]
     postores = db.query(models.Asistente).filter(models.Asistente.subasta == dest.identificador).count()
     historial = (
         db.query(models.HistorialPujos)
-        .filter(models.HistorialPujos.subasta == dest.identificador)
         .order_by(models.HistorialPujos.fechaHora.desc())
         .limit(5)
         .all()
     )
+    # Cargar personas, items y presentaciones en bloque para evitar N+1
+    cliente_ids = [h.cliente for h in historial]
+    item_ids = [h.itemCatalogo for h in historial]
+    personas_map = {
+        p.identificador: p
+        for p in db.query(models.Persona).filter(models.Persona.identificador.in_(cliente_ids)).all()
+    } if cliente_ids else {}
+    items_map = {
+        it.identificador: it
+        for it in db.query(models.ItemCatalogo).filter(models.ItemCatalogo.identificador.in_(item_ids)).all()
+    } if item_ids else {}
+    producto_ids = [it.producto for it in items_map.values()]
+    pp_map = {
+        pp.producto: pp
+        for pp in db.query(models.ProductoPresentacion).filter(
+            models.ProductoPresentacion.producto.in_(producto_ids)
+        ).all()
+    } if producto_ids else {}
+
     actividad = []
     for h in historial:
-        persona = db.query(models.Persona).filter(models.Persona.identificador == h.cliente).first()
-        item = db.query(models.ItemCatalogo).filter(models.ItemCatalogo.identificador == h.itemCatalogo).first()
+        persona = personas_map.get(h.cliente)
+        item = items_map.get(h.itemCatalogo)
         if not item:
             continue
-        pp = db.query(models.ProductoPresentacion).filter(
-            models.ProductoPresentacion.producto == item.producto
-        ).first()
+        pp = pp_map.get(item.producto)
         actividad.append(schemas.ActividadReciente(
             pujaId=h.identificador,
             nombreComprador=persona.nombre if persona else "Desconocido",
             nombreProducto=pp.titulo if pp else "Desconocido",
-            fecha=h.fechaHora,
+            fecha=h.fechaHora.replace(tzinfo=timezone.utc),
             valor=f"${h.importe:,.2f}",
         ))
 
@@ -82,23 +100,23 @@ def get_home(db: Session, categoria: str) -> schemas.HomeResponse:
     destacada = schemas.SubastaDestacada(
         subastaId=dest.identificador,
         titulo=_titulo(dest.identificador),
-        fecha=datetime.combine(dest.fecha, dest.hora),
+        fecha=datetime.combine(dest.fecha, dest.hora).replace(tzinfo=timezone.utc),
         imagen=get_foto_b64(db, primer_prod) if primer_prod else None,
         postoresRegistrados=postores,
         categoria=dest.categoria,
-        enVivo=_en_vivo(dest),
+        enVivo=_en_vivo(dest, db),
         actividadReciente=actividad,
     )
 
     generales = []
-    for s in subastas[1:]:
+    for s in (s for i, s in enumerate(subastas) if i != dest_idx):
         prod_id = _primer_producto_id(s.identificador)
         generales.append(schemas.SubastaGeneral(
             subastaId=s.identificador,
             titulo=_titulo(s.identificador),
-            fecha=datetime.combine(s.fecha, s.hora),
+            fecha=datetime.combine(s.fecha, s.hora).replace(tzinfo=timezone.utc),
             categoria=s.categoria,
-            enVivo=_en_vivo(s),
+            enVivo=_en_vivo(s, db),
             imagen=get_foto_b64(db, prod_id) if prod_id else None,
         ))
 
@@ -288,8 +306,24 @@ def ep_delete_item_catalogo(item_id: int, db: Session = Depends(get_db)):
     return {"message": f"Item {item_id} eliminado con éxito"}
 
 @router.get("/home", response_model=schemas.HomeResponse)
-def ep_get_home(categoria: str = Query(...), db: Session = Depends(get_db)):
-    return get_home(db, categoria)
+def ep_get_home(db: Session = Depends(get_db)):
+    return get_home(db)
+
+
+@router.get("/subastas/{subasta_id}/info")
+def ep_get_subasta_info(subasta_id: int, db: Session = Depends(get_db)):
+    subasta = db.query(models.Subasta).filter(models.Subasta.identificador == subasta_id).first()
+    if not subasta:
+        raise HTTPException(status_code=404, detail="Subasta no encontrada")
+    # Devolver la hora con offset explícito -03:00 (Argentina).
+    # Sin offset, JavaScript interpreta la cadena como hora local del dispositivo,
+    # lo que da resultados incorrectos si el dispositivo no está en UTC-3.
+    return {
+        "subastaId": subasta_id,
+        "fecha": datetime.combine(subasta.fecha, subasta.hora).replace(tzinfo=timezone.utc).isoformat(),
+        "categoria": subasta.categoria,
+        "enVivo": _en_vivo(subasta, db),
+    }
 
 @router.get("/subastas/{subasta_id}/catalogo", response_model=list[schemas.ProductoCatalogo])
 def ep_get_catalogo_subasta(subasta_id: int, db: Session = Depends(get_db)):

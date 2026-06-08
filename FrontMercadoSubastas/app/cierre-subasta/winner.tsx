@@ -6,6 +6,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter, Stack, useLocalSearchParams } from 'expo-router';
 import BottomTabBar from '@/components/BottomTabBar';
 import { API_ENDPOINTS } from '@/constants/api';
+import { useSession } from '@/contexts/SessionContext';
 
 type ProductoComprado = {
   productoId: number;
@@ -28,6 +29,12 @@ const formatCurrency = (n: number) =>
 export default function WinnerScreen() {
   const router = useRouter();
   const { subastaId, clienteId } = useLocalSearchParams<{ subastaId: string; clienteId: string }>();
+  const { session } = useSession();
+
+  useEffect(() => {
+    if (!session?.identificador) router.replace('/sign-in');
+    else if (clienteId && session.identificador !== parseInt(clienteId)) router.replace('/exploracion');
+  }, [session, clienteId]);
 
   const [compras, setCompras]   = useState<ProductoComprado[]>([]);
   const [precio, setPrecio]     = useState<PrecioFinal | null>(null);
@@ -56,6 +63,8 @@ export default function WinnerScreen() {
   }, [subastaId, clienteId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  if (!session?.identificador) return null;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>

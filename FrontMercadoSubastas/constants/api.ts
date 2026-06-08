@@ -22,8 +22,9 @@ export const API_ENDPOINTS = {
   medioPagoCuenta:  `${API_BASE_URL}/mediosPago/cuenta-bancaria`,
   medioPagoCheque:  `${API_BASE_URL}/mediosPago/cheque`,
   // Exploración
-  home:             (categoria: string) => `${API_BASE_URL}/home?categoria=${categoria}`,
+  home:             `${API_BASE_URL}/home`,
   catalogoSubasta:  (subastaId: number | string) => `${API_BASE_URL}/subastas/${subastaId}/catalogo`,
+  subastaInfo:      (subastaId: number | string) => `${API_BASE_URL}/subastas/${subastaId}/info`,
   detalleProducto:  (subastaId: number | string, productoId: number | string) =>
                       `${API_BASE_URL}/subastas/${subastaId}/catalogo/${productoId}`,
   // Sala de subastas — en vivo

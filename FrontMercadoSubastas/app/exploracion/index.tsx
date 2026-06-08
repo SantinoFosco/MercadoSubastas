@@ -88,15 +88,24 @@ const CATEGORY_CONFIG: Record<string, { label: string; textColor: string; badgeB
   platino:  { label: 'PLATINO',  textColor: '#2C6E8A', badgeBg: '#E8F4F8', badgeColor: '#2C6E8A' },
 };
 
+const CATEGORIA_ORDER: Record<string, number> = {
+  comun: 0, especial: 1, plata: 2, oro: 3, platino: 4,
+};
+
 function getCategoryConfig(categoria: string) {
   return CATEGORY_CONFIG[categoria] ?? CATEGORY_CONFIG['comun'];
+}
+
+function puedeAcceder(categoriaSubasta: string, categoriaUsuario: string | undefined): boolean {
+  if (!categoriaUsuario) return false;
+  return (CATEGORIA_ORDER[categoriaUsuario] ?? 0) >= (CATEGORIA_ORDER[categoriaSubasta] ?? 0);
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function ExploracionScreen() {
   const router = useRouter();
-  const { session, getCategoria } = useSession();
+  const { session } = useSession();
   const isLoggedIn = !!session;
   const [data, setData] = useState<HomeData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -106,8 +115,7 @@ export default function ExploracionScreen() {
     setLoading(true);
     setError('');
     try {
-      const categoria = getCategoria();
-      const res = await fetch(API_ENDPOINTS.home(categoria));
+      const res = await fetch(API_ENDPOINTS.home);
       if (!res.ok) throw new Error('Error al cargar el home');
       const json: HomeData = await res.json();
       setData(json);
@@ -116,7 +124,7 @@ export default function ExploracionScreen() {
     } finally {
       setLoading(false);
     }
-  }, [getCategoria]);
+  }, []);
 
   // Refresca cada vez que la pantalla recibe el foco (al volver desde subasta, perfil, etc.)
   useFocusEffect(useCallback(() => { fetchHome(); }, [fetchHome]));
@@ -194,12 +202,20 @@ export default function ExploracionScreen() {
                   <View style={styles.liveCardGradientCenter} />
                   <View style={styles.liveCardGlowAccent} />
 
-                  {destacada.enVivo && (
-                    <View style={styles.liveBadge}>
-                      <View style={styles.liveBadgeDot} />
-                      <Text style={styles.liveBadgeText}>EN VIVO</Text>
-                    </View>
-                  )}
+                  <View style={styles.liveCardBadgeRow}>
+                    {destacada.enVivo && (
+                      <View style={styles.liveBadge}>
+                        <View style={styles.liveBadgeDot} />
+                        <Text style={styles.liveBadgeText}>EN VIVO</Text>
+                      </View>
+                    )}
+                    {isLoggedIn && !puedeAcceder(destacada.categoria, session?.categoria) && (
+                      <View style={styles.liveLockBadge}>
+                        <MaterialCommunityIcons name="lock-outline" size={12} color="#FFD700" />
+                        <Text style={styles.liveLockBadgeText}>Categoría requerida</Text>
+                      </View>
+                    )}
+                  </View>
 
                   <Text style={styles.liveCardLotInfo}>
                     {destacada.enVivo
@@ -277,8 +293,11 @@ export default function ExploracionScreen() {
             )}
 
             {generales.map((auction) => {
-              const badge = formatDateBadge(auction.fecha);
+              const badge = auction.enVivo
+                ? { text: 'EN VIVO', bg: '#E53935', color: '#FFFFFF' }
+                : formatDateBadge(auction.fecha);
               const cat = getCategoryConfig(auction.categoria);
+              const accesible = puedeAcceder(auction.categoria, session?.categoria);
               return (
                 <TouchableOpacity
                   key={auction.subastaId}
@@ -292,10 +311,19 @@ export default function ExploracionScreen() {
                   })}
                 >
                   <View style={styles.upcomingCard}>
-                    <View style={[styles.dateBadge, { backgroundColor: badge.bg }]}>
-                      <Text style={[styles.dateBadgeText, { color: badge.color }]}>
-                        {badge.text}
-                      </Text>
+                    <View style={styles.upcomingCardTopRow}>
+                      <View style={[styles.dateBadge, { backgroundColor: badge.bg }]}>
+                        {auction.enVivo && <View style={styles.upcomingLiveDot} />}
+                        <Text style={[styles.dateBadgeText, { color: badge.color }]}>
+                          {badge.text}
+                        </Text>
+                      </View>
+                      {isLoggedIn && !accesible && (
+                        <View style={styles.lockBadge}>
+                          <MaterialCommunityIcons name="lock-outline" size={12} color="#8A6D3B" />
+                          <Text style={styles.lockBadgeText}>Categoría requerida</Text>
+                        </View>
+                      )}
                     </View>
 
                     {auction.imagen ? (
@@ -484,16 +512,36 @@ const styles = StyleSheet.create({
     borderRadius: 60,
     backgroundColor: 'rgba(229,57,53,0.05)',
   },
+  liveCardBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 16,
+  },
   liveBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'flex-start',
     backgroundColor: '#E53935',
     borderRadius: 6,
     paddingHorizontal: 10,
     paddingVertical: 5,
     gap: 6,
-    marginBottom: 16,
+  },
+  liveLockBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255,215,0,0.15)',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderWidth: 1,
+    borderColor: 'rgba(255,215,0,0.4)',
+  },
+  liveLockBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#FFD700',
   },
   liveBadgeDot: {
     width: 6,
@@ -656,12 +704,25 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 2,
   },
+  upcomingCardTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  upcomingLiveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#FFFFFF',
+    marginRight: 6,
+  },
   dateBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
     alignSelf: 'flex-start',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
-    marginBottom: 12,
   },
   dateBadgeText: {
     fontSize: 11,
@@ -711,5 +772,22 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF8E1',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  lockBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FFF8E1',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: '#FFD700',
+    marginLeft: 8,
+  },
+  lockBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#8A6D3B',
   },
 });
