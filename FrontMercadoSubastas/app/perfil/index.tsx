@@ -48,20 +48,11 @@ export default function PerfilScreen() {
         if (!clienteRes.ok) throw new Error('Error al obtener perfil');
       const perfilData = await clienteRes.json();
 
-      let paisNombre = '-';
-      if (perfilData.numeroPais) {
-        const paisRes = await fetch(API_ENDPOINTS.paisDetalle(perfilData.numeroPais));
-        if (paisRes.ok) {
-          const paisData = await paisRes.json();
-          paisNombre = paisData.nombre;
-        }
-      }
-
       setProfile({
         nombre: perfilData.nombre,
         correo: perfilData.mail,
         categoria: CATEGORIA_LABEL[perfilData.categoria] ?? perfilData.categoria,
-        pais: paisNombre,
+        pais: perfilData.paisNombre ?? '-',
       });
 
       if (multasRes.ok) {

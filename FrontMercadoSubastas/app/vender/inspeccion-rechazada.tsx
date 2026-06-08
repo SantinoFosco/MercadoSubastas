@@ -2,6 +2,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React from 'react';
 import {
+  Alert,
   Image,
   ScrollView,
   StyleSheet,
@@ -85,7 +86,7 @@ export default function InspeccionRechazadaScreen() {
         <TouchableOpacity
           style={styles.ctaButton}
           activeOpacity={0.85}
-          onPress={() => router.back()}
+          onPress={() => Alert.alert('Próximamente', 'El pago de devolución estará disponible pronto.')}
         >
           <View style={styles.ctaButtonInner}>
             <MaterialCommunityIcons

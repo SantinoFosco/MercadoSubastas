@@ -15,6 +15,7 @@ export const API_ENDPOINTS = {
   registroDesaprobar: `${API_BASE_URL}/auth/registro/desaprobar`,
   login:              `${API_BASE_URL}/auth/login`,
   cambiarClave:       `${API_BASE_URL}/auth/cambiar-clave`,
+  estadoRegistro:     (mail: string) => `${API_BASE_URL}/auth/estado?mail=${encodeURIComponent(mail)}`,
   // Países
   paises: `${API_BASE_URL}/paises/`,
   // Medios de pago
@@ -23,6 +24,7 @@ export const API_ENDPOINTS = {
   medioPagoCheque:  `${API_BASE_URL}/mediosPago/cheque`,
   // Exploración
   home:             (categoria: string) => `${API_BASE_URL}/home?categoria=${categoria}`,
+  subastaInfo:      (subastaId: number | string) => `${API_BASE_URL}/subastas/${subastaId}/info`,
   catalogoSubasta:  (subastaId: number | string) => `${API_BASE_URL}/subastas/${subastaId}/catalogo`,
   detalleProducto:  (subastaId: number | string, productoId: number | string) =>
                       `${API_BASE_URL}/subastas/${subastaId}/catalogo/${productoId}`,

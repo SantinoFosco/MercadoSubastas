@@ -33,25 +33,30 @@ def ep_pagos_pendientes(db: Session = Depends(get_db)):
     registros = db.query(models.RegistroSubasta).filter(
         models.RegistroSubasta.pagado == "pendiente"
     ).all()
+    if not registros:
+        return []
+
+    cliente_ids = list({r.cliente for r in registros})
+    subasta_ids = list({r.subasta for r in registros})
+    medio_ids = list({r.medio_pago for r in registros if r.medio_pago})
+
+    personas = {p.identificador: p for p in db.query(models.Persona).filter(
+        models.Persona.identificador.in_(cliente_ids)).all()}
+    detalles = {d.persona: d for d in db.query(models.PersonaDetalle).filter(
+        models.PersonaDetalle.persona.in_(cliente_ids)).all()}
+    subastas_d = {s.identificador: s for s in db.query(models.Subasta).filter(
+        models.Subasta.identificador.in_(subasta_ids)).all()}
+    medios = {m.identificador: m for m in db.query(models.MedioPago).filter(
+        models.MedioPago.identificador.in_(medio_ids)).all()} if medio_ids else {}
 
     result = []
     for r in registros:
-        persona = db.query(models.Persona).filter(
-            models.Persona.identificador == r.cliente
-        ).first()
-        detalle = db.query(models.PersonaDetalle).filter(
-            models.PersonaDetalle.persona == r.cliente
-        ).first()
-        subasta = db.query(models.Subasta).filter(
-            models.Subasta.identificador == r.subasta
-        ).first()
-        medio = db.query(models.MedioPago).filter(
-            models.MedioPago.identificador == r.medio_pago
-        ).first() if r.medio_pago else None
-
+        persona = personas.get(r.cliente)
+        detalle = detalles.get(r.cliente)
+        subasta = subastas_d.get(r.subasta)
+        medio = medios.get(r.medio_pago) if r.medio_pago else None
         costo_envio = float(r.costo_envio) if r.costo_envio else 0.0
         total = round(float(r.importe) + float(r.comision) + costo_envio, 2)
-
         result.append(schemas.AdminPagoPendienteResponse(
             registroId=r.identificador,
             clienteId=r.cliente,

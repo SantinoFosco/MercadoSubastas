@@ -350,34 +350,52 @@ def ep_get_pujas_cliente(
         .order_by(models.HistorialPujos.fechaHora.desc())
         .all()
     )
+    if not rows:
+        return []
+
+    pujo_ids = list({h.pujo for h in rows})
+    item_ids = list({h.itemCatalogo for h in rows})
+
+    pujos = {p.identificador: p for p in db.query(models.Pujo).filter(
+        models.Pujo.identificador.in_(pujo_ids)).all()}
+    items = {i.identificador: i for i in db.query(models.ItemCatalogo).filter(
+        models.ItemCatalogo.identificador.in_(item_ids)).all()}
+
+    prod_ids = list({i.producto for i in items.values()})
+    pps = {pp.producto: pp for pp in db.query(models.ProductoPresentacion).filter(
+        models.ProductoPresentacion.producto.in_(prod_ids)).all()} if prod_ids else {}
+
+    # Registros de pago solo para ítems ganados
+    ganados_prod_ids = [
+        items[h.itemCatalogo].producto
+        for h in rows
+        if pujos.get(h.pujo) and pujos[h.pujo].ganador == "si" and h.itemCatalogo in items
+    ]
+    registros = {}
+    if ganados_prod_ids:
+        regs = db.query(models.RegistroSubasta).filter(
+            models.RegistroSubasta.cliente == cliente_id,
+            models.RegistroSubasta.producto.in_(ganados_prod_ids),
+        ).all()
+        registros = {(r.subasta, r.producto): r for r in regs}
+
     result = []
     for h in rows:
-        pujo = db.query(models.Pujo).filter(models.Pujo.identificador == h.pujo).first()
+        pujo = pujos.get(h.pujo)
         if not pujo:
             continue
         if ganadas is True and pujo.ganador != "si":
             continue
         if ganadas is False and pujo.ganador != "no":
             continue
-        item = db.query(models.ItemCatalogo).filter(
-            models.ItemCatalogo.identificador == h.itemCatalogo
-        ).first()
-        pp = (
-            db.query(models.ProductoPresentacion)
-            .filter(models.ProductoPresentacion.producto == item.producto)
-            .first()
-            if item else None
-        )
+        item = items.get(h.itemCatalogo)
+        pp = pps.get(item.producto) if item else None
         titulo = pp.titulo if pp else "Artículo desconocido"
         estado_pago = None
         if pujo.ganador == "si" and item:
-            registro = db.query(models.RegistroSubasta).filter(
-                models.RegistroSubasta.subasta == h.subasta,
-                models.RegistroSubasta.producto == item.producto,
-                models.RegistroSubasta.cliente == cliente_id,
-            ).first()
-            if registro:
-                estado_pago = registro.pagado
+            reg = registros.get((h.subasta, item.producto))
+            if reg:
+                estado_pago = reg.pagado
         result.append(schemas.PujaHistorialItem(
             subastaId=h.subasta,
             itemId=h.itemCatalogo,

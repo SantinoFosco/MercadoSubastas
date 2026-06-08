@@ -160,11 +160,20 @@ def get_catalogo_subasta(db: Session, subasta_id: int):
     catalogo = db.query(models.Catalogo).filter(models.Catalogo.subasta == subasta_id).first()
     if not catalogo:
         return []
-    items = db.query(models.ItemCatalogo).filter(models.ItemCatalogo.catalogo == catalogo.identificador).all()
+    items = db.query(models.ItemCatalogo).filter(
+        models.ItemCatalogo.catalogo == catalogo.identificador
+    ).all()
+    if not items:
+        return []
+    prod_ids = list({item.producto for item in items})
+    pps = {pp.producto: pp for pp in db.query(models.ProductoPresentacion).filter(
+        models.ProductoPresentacion.producto.in_(prod_ids)).all()}
+    prods = {p.identificador: p for p in db.query(models.Producto).filter(
+        models.Producto.identificador.in_(prod_ids)).all()}
     result = []
     for item in items:
-        pp = db.query(models.ProductoPresentacion).filter(models.ProductoPresentacion.producto == item.producto).first()
-        producto = db.query(models.Producto).filter(models.Producto.identificador == item.producto).first()
+        pp = pps.get(item.producto)
+        producto = prods.get(item.producto)
         result.append(schemas.ProductoCatalogo(
             productoId=item.producto,
             titulo=pp.titulo if pp else "Sin título",
@@ -339,6 +348,28 @@ def ep_delete_item_catalogo(item_id: int, db: Session = Depends(get_db)):
 @router.get("/home", response_model=schemas.HomeResponse)
 def ep_get_home(categoria: str = Query(...), db: Session = Depends(get_db)):
     return get_home(db, categoria)
+
+@router.get("/subastas/{subasta_id}/info", response_model=schemas.SubastaInfoResponse)
+def ep_get_subasta_info(subasta_id: int, db: Session = Depends(get_db)):
+    subasta = db.query(models.Subasta).filter(models.Subasta.identificador == subasta_id).first()
+    if not subasta:
+        raise HTTPException(status_code=404, detail="Subasta no encontrada")
+    ahora = datetime.now(tz=_AR_TZ).replace(tzinfo=None)
+    inicio = datetime.combine(subasta.fecha, subasta.hora)
+    en_vivo = False
+    if subasta.estado == "abierta" and inicio <= ahora:
+        cat = db.query(models.Catalogo).filter(models.Catalogo.subasta == subasta_id).first()
+        if cat:
+            en_vivo = db.query(models.ItemCatalogo).filter(
+                models.ItemCatalogo.catalogo == cat.identificador,
+                models.ItemCatalogo.subastado == "no",
+            ).count() > 0
+    return schemas.SubastaInfoResponse(
+        subastaId=subasta.identificador,
+        estado=subasta.estado,
+        enVivo=en_vivo,
+        fecha=inicio,
+    )
 
 @router.get("/subastas/{subasta_id}/catalogo", response_model=list[schemas.ProductoCatalogo])
 def ep_get_catalogo_subasta(subasta_id: int, db: Session = Depends(get_db)):

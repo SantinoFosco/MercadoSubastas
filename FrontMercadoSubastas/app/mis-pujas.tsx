@@ -187,7 +187,7 @@ export default function MisPujasScreen() {
                     <TouchableOpacity
                       style={styles.pagarButton}
                       onPress={() => router.push({
-                        pathname: '/cierre-subasta/winner',
+                        pathname: '/cierre-subasta/delivery-details',
                         params: {
                           subastaId: String(puja.subastaId),
                           clienteId: String(session?.identificador ?? ''),

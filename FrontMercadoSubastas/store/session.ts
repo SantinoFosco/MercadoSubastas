@@ -21,10 +21,6 @@ export const SessionStore = {
     return _session;
   },
 
-  getCategoria(): Categoria {
-    return _session?.categoria ?? 'comun';
-  },
-
   async save(data: UserSession): Promise<void> {
     _session = data;
     await SecureStore.setItemAsync(SESSION_KEY, JSON.stringify(data));

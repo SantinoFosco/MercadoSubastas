@@ -61,6 +61,11 @@ export default function PasswordSetupScreen() {
       }
 
       // Auto-login: la cuenta ya fue aprobada por el admin y la clave está establecida.
+      const parsedId = parseInt(clienteId ?? '', 10);
+      if (isNaN(parsedId)) {
+        router.replace('/sign-in');
+        return;
+      }
       try {
         const loginRes = await fetch(API_ENDPOINTS.login, {
           method: 'POST',
@@ -70,12 +75,13 @@ export default function PasswordSetupScreen() {
         if (loginRes.ok) {
           const userData = await loginRes.json();
           await login(userData);
+          router.push({ pathname: '/payments', params: { clienteId } });
+        } else {
+          router.replace('/sign-in');
         }
       } catch {
-        // Si el auto-login falla, el usuario puede iniciar sesión manualmente.
+        router.replace('/sign-in');
       }
-
-      router.push({ pathname: '/payments', params: { clienteId } });
     } catch {
       setError('No se pudo conectar con el servidor. Verificá tu conexión a internet.');
     } finally {

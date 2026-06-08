@@ -32,7 +32,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
           // This handles the case where the DB was reset (docker compose down -v)
           // and the old identificador no longer maps to any user.
           const res = await fetch(API_ENDPOINTS.perfilCompleto(stored.identificador));
-          if (res.status === 404) {
+          if (res.status === 401 || res.status === 403 || res.status === 404) {
             await SessionStore.clear();
             setSession(null);
           } else {

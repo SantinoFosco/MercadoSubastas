@@ -615,6 +615,14 @@ class AdminPagoPendienteResponse(BaseModel):
     metodoPago: Optional[str] = None
     fechaLimitePago: Optional[datetime] = None
 
+#------------------ Info rápida subasta --------------------#
+
+class SubastaInfoResponse(BaseModel):
+    subastaId: int
+    estado: str
+    enVivo: bool
+    fecha: datetime
+
 #------------------ Historial de pujas del cliente ---------#
 
 class PujaHistorialItem(BaseModel):

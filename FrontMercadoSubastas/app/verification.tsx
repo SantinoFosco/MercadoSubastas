@@ -27,14 +27,18 @@ export default function VerificationScreen() {
     if (!mail) return;
     setChecking(true);
     try {
-      const response = await fetch(API_ENDPOINTS.login, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mail, contrasenia: '' }),
-      });
+      const response = await fetch(API_ENDPOINTS.estadoRegistro(mail));
       const data = await response.json();
 
-      if (response.ok && data.claveTemporal) {
+      if (!response.ok) return;
+
+      if (data.estado === 'rechazado') {
+        stopPolling();
+        setIsRechazado(true);
+        return;
+      }
+
+      if (data.estado === 'aprobado') {
         stopPolling();
         router.replace({
           pathname: '/register_final',
@@ -42,14 +46,7 @@ export default function VerificationScreen() {
         });
         return;
       }
-
-      if (response.status === 403 && data.detail?.includes('habilitada')) {
-        stopPolling();
-        setIsRechazado(true);
-        return;
-      }
-
-      // 403 "aún no verificado" → seguir esperando, no hacer nada
+      // data.estado === 'pendiente' → seguir esperando
     } catch {
       // error de red → silencioso, el polling reintenta
     } finally {

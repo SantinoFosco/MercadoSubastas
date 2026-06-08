@@ -2,7 +2,7 @@ import { Stack, useRouter } from 'expo-router';
 import { useEffect } from 'react';
 import { useSession } from '@/contexts/SessionContext';
 
-export default function PerfilLayout() {
+export default function CierreSubastaLayout() {
   const { session, isLoading } = useSession();
   const router = useRouter();
 
@@ -16,10 +16,9 @@ export default function PerfilLayout() {
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="index" />
-      <Stack.Screen name="estadisticas" />
-      <Stack.Screen name="medios-pago" />
-      <Stack.Screen name="multas" />
+      <Stack.Screen name="winner" />
+      <Stack.Screen name="delivery-details" />
+      <Stack.Screen name="confirm-payment" />
     </Stack>
   );
 }

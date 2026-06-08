@@ -35,7 +35,7 @@ function formatCurrency(amount: number): string {
 export default function CatalogoScreen() {
   const router = useRouter();
   const { subastaId } = useLocalSearchParams<{ subastaId: string }>();
-  const { session, getCategoria } = useSession();
+  const { session } = useSession();
   const isLoggedIn = !!session;
 
   const [lots, setLots] = useState<ProductoCatalogo[]>([]);
@@ -54,9 +54,9 @@ export default function CatalogoScreen() {
     setError('');
     setIsEnVivo(false);
     try {
-      const [catalogoRes, homeRes] = await Promise.all([
+      const [catalogoRes, infoRes] = await Promise.all([
         fetch(API_ENDPOINTS.catalogoSubasta(subastaId)),
-        fetch(API_ENDPOINTS.home(getCategoria())),
+        fetch(API_ENDPOINTS.subastaInfo(subastaId)),
       ]);
 
       if (!catalogoRes.ok) {
@@ -67,24 +67,17 @@ export default function CatalogoScreen() {
       const json: ProductoCatalogo[] = await catalogoRes.json();
       setLots(json);
 
-      if (homeRes.ok) {
-        const homeData = await homeRes.json();
-        const id = parseInt(subastaId, 10);
-        const destacada = homeData.subastaDestacada;
-        const generales: any[] = homeData.subastasGenerales ?? [];
-        const todas = [...(destacada ? [destacada] : []), ...generales];
-        const match = todas.find((s) => s.subastaId === id);
-        if (match) {
-          setIsEnVivo(match.enVivo === true);
-          setSubastaInfo({ fecha: new Date(match.fecha), categoria: match.categoria });
-        }
+      if (infoRes.ok) {
+        const infoData = await infoRes.json();
+        setIsEnVivo(infoData.enVivo === true);
+        setSubastaInfo({ fecha: new Date(infoData.fecha), categoria: null });
       }
     } catch {
       setError('No se pudo cargar el catálogo. Verificá tu conexión.');
     } finally {
       setLoading(false);
     }
-  }, [subastaId, getCategoria]);
+  }, [subastaId]);
 
   useEffect(() => { fetchCatalogo(); }, [fetchCatalogo]);
 
