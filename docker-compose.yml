@@ -29,7 +29,7 @@ services:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/mercado_subastas
       DEV_MODE: "true"
       # Segundos sin pujas para cerrar un ítem. Bajar a 5 para testing rápido.
-      AUCTION_ITEM_TIMEOUT: ${AUCTION_ITEM_TIMEOUT:-60}
+      AUCTION_ITEM_TIMEOUT: ${AUCTION_ITEM_TIMEOUT:-20}
     volumes:
       - ./APIMercadoSubastas:/app
     depends_on:

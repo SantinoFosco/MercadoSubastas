@@ -34,7 +34,7 @@ export default function PerfilScreen() {
 
   const fetchProfile = useCallback(async () => {
     if (!session) {
-      router.replace('/login');
+      router.replace('/exploracion');
       return;
     }
     setLoading(true);
