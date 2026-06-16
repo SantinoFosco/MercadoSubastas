@@ -69,13 +69,29 @@ function formatTime(isoDate: string): string {
 
 const MONTHS = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
 
-function formatDateBadge(isoDate: string): { text: string; bg: string; color: string } {
-  const date = new Date(isoDate);
-  const now = new Date();
-  const diffDays = Math.floor((date.getTime() - now.getTime()) / 86400000);
+function parseDateLocal(isoDate: string): Date {
+  // Extrae solo la parte "YYYY-MM-DD" (descarta la hora si viene como
+  // "YYYY-MM-DDTHH:MM:SSZ") y la construye como medianoche local.
+  // Así evita que JS interprete la fecha como UTC, lo que en Argentina
+  // (UTC-3) correría la medianoche 3 horas hacia atrás y puede cambiar
+  // el día calendario resultante.
+  const [y, mo, d] = isoDate.split('T')[0].split('-').map(Number);
+  return new Date(y, mo - 1, d);
+}
 
-  if (diffDays < 0)  return { text: 'PASADA',           bg: '#999999', color: '#FFFFFF' };
-  if (diffDays === 0) return { text: 'HOY',              bg: '#E53935', color: '#FFFFFF' };
+function diffCalendarDays(isoDate: string): number {
+  const dateOnly = parseDateLocal(isoDate);
+  const nowOnly  = new Date();
+  nowOnly.setHours(0, 0, 0, 0);
+  return Math.round((dateOnly.getTime() - nowOnly.getTime()) / 86400000);
+}
+
+function formatDateBadge(isoDate: string): { text: string; bg: string; color: string } {
+  const diffDays = diffCalendarDays(isoDate);
+  const date = parseDateLocal(isoDate);
+
+  if (diffDays < 0)  return { text: 'PASADA',              bg: '#999999', color: '#FFFFFF' };
+  if (diffDays === 0) return { text: 'HOY',                bg: '#E53935', color: '#FFFFFF' };
   if (diffDays <= 7)  return { text: `EN ${diffDays} DÍAS`, bg: '#FFD700', color: '#1A1A1A' };
   return { text: `${date.getDate()} DE ${MONTHS[date.getMonth()]}`, bg: '#1A1A1A', color: '#FFFFFF' };
 }
@@ -221,9 +237,8 @@ export default function ExploracionScreen() {
                     {destacada.enVivo
                       ? `SUBASTA #${destacada.subastaId} · EN CURSO`
                       : (() => {
-                          const d = new Date(destacada.fecha);
-                          const now = new Date();
-                          const diffDays = Math.floor((d.getTime() - now.getTime()) / 86400000);
+                          const diffDays = diffCalendarDays(destacada.fecha);
+                          const d = parseDateLocal(destacada.fecha);
                           const label = diffDays === 0 ? 'HOY' : diffDays === -1 ? 'AYER' : d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' });
                           return `SUBASTA #${destacada.subastaId} · ${label} ${formatTime(destacada.fecha)}`;
                         })()

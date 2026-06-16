@@ -330,6 +330,8 @@ class InspeccionProducto(Base):
     estado = Column(String, nullable=False, server_default="pendiente")
     observaciones = Column(String, nullable=True)
     costo_devolucion = Column(Numeric(precision=18, scale=2), nullable=True)
+    precio_base = Column(Numeric(precision=18, scale=2), nullable=True)
+    comision = Column(Numeric(precision=18, scale=2), nullable=True)
     fecha_ultima_actualizacion = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
 
     __table_args__ = (

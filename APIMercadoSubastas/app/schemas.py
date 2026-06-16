@@ -73,6 +73,9 @@ class MedioPagoItem(BaseModel):
     esInternacional: bool
     montoCheque: Optional[Decimal] = None
     montoDisponibleCheque: Optional[Decimal] = None
+    clienteId: Optional[int] = None
+    nombreCliente: Optional[str] = None
+    mailCliente: Optional[str] = None
 
 class MedioPagoListResponse(BaseModel):
     tieneMedioPagoVerificado: bool
@@ -499,9 +502,21 @@ class InspeccionUpdateRequest(BaseModel):
     observaciones: Optional[str] = None
     costo_devolucion: Optional[float] = None  # requerido si estado="rechazado"
     # Solo requeridos si estado="aprobado":
-    subastaId: Optional[int] = None
     precioBase: Optional[float] = None
     comision: Optional[float] = None
+
+class AsignarSubastaRequest(BaseModel):
+    subastaId: int
+
+class AdminArticuloListoAsignar(BaseModel):
+    productoId: int
+    titulo: str
+    categoria: str
+    precioBase: float
+    comision: float
+    duenioId: int
+    duenioNombre: str
+    fechaAceptacion: Optional[datetime] = None
 
 class AdminSubastaItem(BaseModel):
     subastaId: int

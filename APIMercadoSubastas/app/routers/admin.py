@@ -235,7 +235,7 @@ def ep_actualizar_inspeccion(
 ):
     """
     Aprueba o rechaza un artículo enviado por un usuario.
-    - Al aprobar: requiere subastaId, precioBase y comision para asignarlo al catálogo.
+    - Al aprobar: requiere precioBase y comision. Crea AceptacionArticulo pendiente para que el usuario confirme.
     - Al rechazar: requiere costo_devolucion.
     """
     estados_validos = {"aprobado", "rechazado"}
@@ -246,8 +246,8 @@ def ep_actualizar_inspeccion(
         raise HTTPException(status_code=422, detail="costo_devolucion es requerido al rechazar")
 
     if request.estado == "aprobado":
-        if request.subastaId is None or request.precioBase is None or request.comision is None:
-            raise HTTPException(status_code=422, detail="subastaId, precioBase y comision son requeridos al aprobar")
+        if request.precioBase is None or request.comision is None:
+            raise HTTPException(status_code=422, detail="precioBase y comision son requeridos al aprobar")
 
     insp = db.query(models.InspeccionProducto).filter(
         models.InspeccionProducto.producto == producto_id
@@ -260,26 +260,8 @@ def ep_actualizar_inspeccion(
     insp.costo_devolucion = request.costo_devolucion
 
     if request.estado == "aprobado":
-        catalogo = db.query(models.Catalogo).filter(
-            models.Catalogo.subasta == request.subastaId
-        ).first()
-        if not catalogo:
-            raise HTTPException(status_code=404, detail=f"No existe catálogo para la subasta #{request.subastaId}")
-
-        ya_en_catalogo = db.query(models.ItemCatalogo).filter(
-            models.ItemCatalogo.catalogo == catalogo.identificador,
-            models.ItemCatalogo.producto == producto_id,
-        ).first()
-        if ya_en_catalogo:
-            raise HTTPException(status_code=409, detail="El artículo ya está asignado a esa subasta")
-
-        db.add(models.ItemCatalogo(
-            catalogo=catalogo.identificador,
-            producto=producto_id,
-            precioBase=request.precioBase,
-            comision=request.comision,
-            subastado="no",
-        ))
+        insp.precio_base = request.precioBase
+        insp.comision = request.comision
 
         aceptacion = db.query(models.AceptacionArticulo).filter(
             models.AceptacionArticulo.producto == producto_id
@@ -288,8 +270,114 @@ def ep_actualizar_inspeccion(
             db.add(models.AceptacionArticulo(producto=producto_id, estado="pendiente"))
 
     db.commit()
-    accion = "aprobado y asignado a la subasta" if request.estado == "aprobado" else "rechazado"
+    accion = "aprobado" if request.estado == "aprobado" else "rechazado"
     return schemas.MensajeResponse(mensaje=f"Artículo #{producto_id} {accion} correctamente.")
+
+
+@router.get("/articulos/listos-para-asignar", response_model=list[schemas.AdminArticuloListoAsignar])
+def ep_articulos_listos_para_asignar(db: Session = Depends(get_db)):
+    """
+    Lista los artículos aprobados por el admin y aceptados por el usuario
+    que aún no fueron asignados a ninguna subasta.
+    """
+    aceptaciones = db.query(models.AceptacionArticulo).filter(
+        models.AceptacionArticulo.estado == "aceptado"
+    ).all()
+
+    result = []
+    for aceptacion in aceptaciones:
+        producto_id = aceptacion.producto
+
+        insp = db.query(models.InspeccionProducto).filter(
+            models.InspeccionProducto.producto == producto_id,
+            models.InspeccionProducto.estado == "aprobado",
+        ).first()
+        if not insp or insp.precio_base is None:
+            continue
+
+        ya_asignado = db.query(models.ItemCatalogo).filter(
+            models.ItemCatalogo.producto == producto_id
+        ).first()
+        if ya_asignado:
+            continue
+
+        producto = db.query(models.Producto).filter(
+            models.Producto.identificador == producto_id
+        ).first()
+        pp = db.query(models.ProductoPresentacion).filter(
+            models.ProductoPresentacion.producto == producto_id
+        ).first()
+        duenio_persona = db.query(models.Persona).filter(
+            models.Persona.identificador == producto.duenio
+        ).first() if producto else None
+
+        result.append(schemas.AdminArticuloListoAsignar(
+            productoId=producto_id,
+            titulo=pp.titulo if pp else f"Producto #{producto_id}",
+            categoria=pp.categoria if pp else "—",
+            precioBase=float(insp.precio_base),
+            comision=float(insp.comision),
+            duenioId=producto.duenio if producto else 0,
+            duenioNombre=duenio_persona.nombre if duenio_persona else "Desconocido",
+            fechaAceptacion=aceptacion.fecha,
+        ))
+    return result
+
+
+@router.post("/articulos/{producto_id}/asignar-subasta", response_model=schemas.MensajeResponse)
+def ep_asignar_subasta(
+    producto_id: int,
+    request: schemas.AsignarSubastaRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Asigna un artículo (aceptado por el usuario) a una subasta activa.
+    Solo se puede ejecutar después de que el usuario haya aceptado las condiciones.
+    """
+    aceptacion = db.query(models.AceptacionArticulo).filter(
+        models.AceptacionArticulo.producto == producto_id,
+        models.AceptacionArticulo.estado == "aceptado",
+    ).first()
+    if not aceptacion:
+        raise HTTPException(status_code=409, detail="El artículo aún no fue aceptado por el usuario")
+
+    subasta = db.query(models.Subasta).filter(
+        models.Subasta.identificador == request.subastaId,
+        models.Subasta.estado == "abierta",
+    ).first()
+    if not subasta:
+        raise HTTPException(status_code=404, detail="Subasta no encontrada o ya fue cerrada")
+
+    insp = db.query(models.InspeccionProducto).filter(
+        models.InspeccionProducto.producto == producto_id,
+        models.InspeccionProducto.estado == "aprobado",
+    ).first()
+    if not insp or insp.precio_base is None or insp.comision is None:
+        raise HTTPException(status_code=409, detail="El artículo no tiene inspección aprobada con precio y comisión")
+
+    catalogo = db.query(models.Catalogo).filter(
+        models.Catalogo.subasta == request.subastaId
+    ).first()
+    if not catalogo:
+        raise HTTPException(status_code=404, detail=f"No existe catálogo para la subasta #{request.subastaId}")
+
+    ya_en_catalogo = db.query(models.ItemCatalogo).filter(
+        models.ItemCatalogo.catalogo == catalogo.identificador,
+        models.ItemCatalogo.producto == producto_id,
+    ).first()
+    if ya_en_catalogo:
+        raise HTTPException(status_code=409, detail="El artículo ya está asignado a esa subasta")
+
+    db.add(models.ItemCatalogo(
+        catalogo=catalogo.identificador,
+        producto=producto_id,
+        precioBase=insp.precio_base,
+        comision=insp.comision,
+        subastado="no",
+    ))
+    db.commit()
+
+    return schemas.MensajeResponse(mensaje=f"Artículo #{producto_id} asignado a la subasta #{request.subastaId} correctamente.")
 
 
 @router.post("/pagos/procesar-vencidos")

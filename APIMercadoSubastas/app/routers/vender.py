@@ -63,12 +63,14 @@ def get_condiciones_articulo(db: Session, producto_id: int):
     ).first()
     titulo = pp.titulo if pp else "Artículo"
 
-    item = db.query(models.ItemCatalogo).filter(models.ItemCatalogo.producto == producto_id).first()
+    insp = db.query(models.InspeccionProducto).filter(
+        models.InspeccionProducto.producto == producto_id
+    ).first()
     aceptacion = db.query(models.AceptacionArticulo).filter(
         models.AceptacionArticulo.producto == producto_id
     ).first()
 
-    if not item:
+    if not insp or insp.estado != "aprobado" or insp.precio_base is None:
         return schemas.ArticuloCondicionesResponse(
             productoId=producto_id,
             titulo=titulo,
@@ -76,21 +78,25 @@ def get_condiciones_articulo(db: Session, producto_id: int):
             aceptacion=aceptacion.estado if aceptacion else None,
         )
 
-    catalogo = db.query(models.Catalogo).filter(models.Catalogo.identificador == item.catalogo).first()
-    subasta = db.query(models.Subasta).filter(
-        models.Subasta.identificador == catalogo.subasta
-    ).first() if catalogo and catalogo.subasta else None
+    # Si ya fue asignado a una subasta, incluir sus datos
+    item = db.query(models.ItemCatalogo).filter(models.ItemCatalogo.producto == producto_id).first()
+    subasta = None
+    if item:
+        catalogo = db.query(models.Catalogo).filter(models.Catalogo.identificador == item.catalogo).first()
+        subasta = db.query(models.Subasta).filter(
+            models.Subasta.identificador == catalogo.subasta
+        ).first() if catalogo and catalogo.subasta else None
 
     return schemas.ArticuloCondicionesResponse(
         productoId=producto_id,
         titulo=titulo,
         tieneCondiciones=True,
-        precioBase=float(item.precioBase),
-        comision=float(item.comision),
+        precioBase=float(insp.precio_base),
+        comision=float(insp.comision),
         subastaFecha=subasta.fecha if subasta else None,
         subastaHora=subasta.hora if subasta else None,
         subastaUbicacion=subasta.ubicacion if subasta else None,
-        aceptacion=aceptacion.estado,
+        aceptacion=aceptacion.estado if aceptacion else None,
     )
 
 

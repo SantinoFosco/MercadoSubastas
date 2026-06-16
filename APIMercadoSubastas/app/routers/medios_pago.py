@@ -1,3 +1,4 @@
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from .. import models, schemas
@@ -201,9 +202,35 @@ def get_cheque_certificado(db: Session, medio_pago_id: int):
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
+def get_medios_pago_pendientes(db: Session) -> schemas.MedioPagoListResponse:
+    """Todos los medios de pago pendientes de aprobación, de cualquier cliente."""
+    medios = db.query(models.MedioPago).filter(models.MedioPago.estado == "pendiente").all()
+    items: list[schemas.MedioPagoItem] = []
+    for medio in medios:
+        item = _build_medio_pago_item(medio, db)
+        persona = db.query(models.Persona).filter(
+            models.Persona.identificador == medio.cliente
+        ).first()
+        detalle = db.query(models.PersonaDetalle).filter(
+            models.PersonaDetalle.persona == medio.cliente
+        ).first()
+        items.append(item.model_copy(update={
+            "clienteId": medio.cliente,
+            "nombreCliente": persona.nombre if persona else None,
+            "mailCliente": detalle.mail if detalle else None,
+        }))
+    return schemas.MedioPagoListResponse(tieneMedioPagoVerificado=False, medios=items)
+
+
 @router.get("", response_model=schemas.MedioPagoListResponse)
-def ep_get_medios_pago_cliente(cliente_id: int = Query(...), db: Session = Depends(get_db)):
-    return get_medios_pago_cliente(db, cliente_id)
+def ep_get_medios_pago_cliente(cliente_id: Optional[int] = Query(None), db: Session = Depends(get_db)):
+    """
+    - Con cliente_id: medios de pago de ese cliente (comportamiento original).
+    - Sin cliente_id: todos los medios pendientes de aprobación con datos del dueño.
+    """
+    if cliente_id is not None:
+        return get_medios_pago_cliente(db, cliente_id)
+    return get_medios_pago_pendientes(db)
 
 @router.post("/cuenta-bancaria", response_model=schemas.CuentaBancariaResponse)
 def ep_create_cuenta_bancaria(request: schemas.CuentaBancariaCreate, db: Session = Depends(get_db)):
