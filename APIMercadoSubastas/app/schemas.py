@@ -494,6 +494,7 @@ class ArticuloListItem(BaseModel):
     observaciones: Optional[str]
     costoDevolucion: Optional[float]
     enSubasta: bool
+    aceptacion: Optional[str] = None
 
 #------------------ Inspección / Admin --------------------#
 

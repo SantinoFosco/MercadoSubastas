@@ -16,7 +16,8 @@ import BottomTabBar from '@/components/BottomTabBar';
 
 export default function InspeccionRechazadaScreen() {
   const router = useRouter();
-  const { titulo, observaciones, costoDevolucion } = useLocalSearchParams<{ titulo: string; observaciones: string; costoDevolucion: string }>();
+  const { titulo, observaciones, costoDevolucion, source } = useLocalSearchParams<{ titulo: string; observaciones: string; costoDevolucion: string; source?: string }>();
+  const rechazadoPorUsuario = source === 'usuario';
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -45,9 +46,13 @@ export default function InspeccionRechazadaScreen() {
         </View>
 
         {/* 3. TITLE & DESCRIPTION */}
-        <Text style={styles.title}>Inspección No Aceptada</Text>
+        <Text style={styles.title}>
+          {rechazadoPorUsuario ? 'Condiciones Rechazadas' : 'Inspección No Aceptada'}
+        </Text>
         <Text style={styles.description}>
-          El artículo no cumple con los estándares de autenticidad o calidad requeridos para subasta.
+          {rechazadoPorUsuario
+            ? 'Rechazaste las condiciones ofrecidas. Coordiná la devolución de tu artículo.'
+            : 'El artículo no cumple con los estándares de autenticidad o calidad requeridos para subasta.'}
         </Text>
 
         {/* 4. PRODUCT IMAGE */}
@@ -61,25 +66,29 @@ export default function InspeccionRechazadaScreen() {
           </View>
         </View>
 
-        {/* 5. REJECTION REASONS CARD */}
-        <View style={styles.reasonsCard}>
-          <Text style={styles.reasonsTitle}>MOTIVOS DEL RECHAZO</Text>
-          <View style={styles.reasonItem}>
-            <View style={styles.reasonBulletRow}>
-              <View style={styles.redDot} />
-              <Text style={styles.reasonItemTitle}>Observaciones del inspector</Text>
+        {/* 5. REJECTION REASONS CARD — solo para rechazo del admin */}
+        {!rechazadoPorUsuario && (
+          <View style={styles.reasonsCard}>
+            <Text style={styles.reasonsTitle}>MOTIVOS DEL RECHAZO</Text>
+            <View style={styles.reasonItem}>
+              <View style={styles.reasonBulletRow}>
+                <View style={styles.redDot} />
+                <Text style={styles.reasonItemTitle}>Observaciones del inspector</Text>
+              </View>
+              <Text style={styles.reasonItemDetail}>{observaciones || 'Sin observaciones registradas.'}</Text>
             </View>
-            <Text style={styles.reasonItemDetail}>{observaciones || 'Sin observaciones registradas.'}</Text>
           </View>
-        </View>
+        )}
 
-        {/* 6. RETURN COST */}
-        <View style={styles.returnCostRow}>
-          <Text style={styles.returnCostLabel}>Costo de Devolución</Text>
-          <Text style={styles.returnCostValue}>
-            {costoDevolucion ? `$${parseFloat(costoDevolucion).toLocaleString('es-AR')}` : 'A confirmar'}
-          </Text>
-        </View>
+        {/* 6. RETURN COST — solo para rechazo del admin */}
+        {!rechazadoPorUsuario && (
+          <View style={styles.returnCostRow}>
+            <Text style={styles.returnCostLabel}>Costo de Devolución</Text>
+            <Text style={styles.returnCostValue}>
+              {costoDevolucion ? `$${parseFloat(costoDevolucion).toLocaleString('es-AR')}` : 'A confirmar'}
+            </Text>
+          </View>
+        )}
 
         {/* 7. CTA BUTTON */}
         <TouchableOpacity

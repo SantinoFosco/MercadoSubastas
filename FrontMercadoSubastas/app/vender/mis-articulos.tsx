@@ -8,8 +8,8 @@ import BottomTabBar from '@/components/BottomTabBar';
 import { API_ENDPOINTS } from '@/constants/api';
 import { useSession } from '@/contexts/SessionContext';
 
-type ArticleStatus = 'pendiente' | 'aprobado' | 'rechazado' | 'en_venta';
-type FilterTab = 'todos' | 'aprobados' | 'en_revision';
+type ArticleStatus = 'en_revision' | 'aprobado' | 'rechazado_admin' | 'rechazado_usuario' | 'aceptado' | 'en_venta';
+type FilterTab = 'todos' | 'aprobados' | 'en_revision' | 'rechazados';
 
 type Article = {
   productoId: number;
@@ -19,33 +19,59 @@ type Article = {
   observaciones: string | null;
   costoDevolucion: number | null;
   enSubasta: boolean;
+  aceptacion: string | null;
 };
 
 const STATUS_LABEL: Record<ArticleStatus, string> = {
-  pendiente:  'EN REVISIÓN',
-  aprobado:   'APROBADO',
-  rechazado:  'RECHAZADO',
-  en_venta:   'EN VENTA',
+  en_revision:      'EN REVISIÓN',
+  aprobado:         'APROBADO',
+  rechazado_admin:  'RECHAZADO',
+  rechazado_usuario:'RECHAZADO',
+  aceptado:         'ACEPTADO',
+  en_venta:         'EN VENTA',
 };
 
 const STATUS_BADGE: Record<ArticleStatus, { bg: string; text: string; border: string }> = {
-  pendiente:  { bg: '#FFF8E1', text: '#F57F17', border: '#FFECB3' },
-  aprobado:   { bg: '#E8F5E9', text: '#2E7D32', border: '#C8E6C9' },
-  rechazado:  { bg: '#FFEBEE', text: '#C62828', border: '#FFCDD2' },
-  en_venta:   { bg: '#E8F5E9', text: '#2E7D32', border: '#C8E6C9' },
+  en_revision:      { bg: '#FFF8E1', text: '#F57F17', border: '#FFECB3' },
+  aprobado:         { bg: '#E8F5E9', text: '#2E7D32', border: '#C8E6C9' },
+  rechazado_admin:  { bg: '#FFEBEE', text: '#C62828', border: '#FFCDD2' },
+  rechazado_usuario:{ bg: '#FFEBEE', text: '#C62828', border: '#FFCDD2' },
+  aceptado:         { bg: '#E3F2FD', text: '#1565C0', border: '#BBDEFB' },
+  en_venta:         { bg: '#E8F5E9', text: '#1B5E20', border: '#A5D6A7' },
+};
+
+const STATUS_SUBTEXTO: Record<ArticleStatus, string> = {
+  en_revision:      'Esperando dictamen',
+  aprobado:         'Revisá las condiciones ofrecidas',
+  rechazado_admin:  'Gestiona tu devolución del artículo',
+  rechazado_usuario:'Gestiona tu devolución del artículo',
+  aceptado:         'Artículo en espera de subasta',
+  en_venta:         'Listado en subasta activa',
+};
+
+const STATUS_ICON: Record<ArticleStatus, string> = {
+  en_revision:      'clock-outline',
+  aprobado:         'check-circle-outline',
+  rechazado_admin:  'alert-circle-outline',
+  rechazado_usuario:'alert-circle-outline',
+  aceptado:         'check-decagram-outline',
+  en_venta:         'gavel',
 };
 
 const FILTER_TABS: { key: FilterTab; label: string }[] = [
-  { key: 'todos',       label: 'Todos' },
-  { key: 'aprobados',   label: 'Aprobados' },
-  { key: 'en_revision', label: 'En Revisión' },
+  { key: 'todos',      label: 'Todos' },
+  { key: 'aprobados',  label: 'Aprobados' },
+  { key: 'en_revision',label: 'En Revisión' },
+  { key: 'rechazados', label: 'Rechazados' },
 ];
 
-function resolveStatus(item: { estadoInspeccion: string; enSubasta: boolean }): ArticleStatus {
+function resolveStatus(item: { estadoInspeccion: string; enSubasta: boolean; aceptacion: string | null }): ArticleStatus {
   if (item.enSubasta) return 'en_venta';
-  const s = item.estadoInspeccion;
-  if (s === 'aprobado' || s === 'rechazado') return s as ArticleStatus;
-  return 'pendiente';
+  if (item.aceptacion === 'aceptado') return 'aceptado';
+  if (item.estadoInspeccion === 'rechazado') return 'rechazado_admin';
+  if (item.estadoInspeccion === 'aprobado' && item.aceptacion === 'rechazado') return 'rechazado_usuario';
+  if (item.estadoInspeccion === 'aprobado') return 'aprobado';
+  return 'en_revision';
 }
 
 export default function MisArticulosScreen() {
@@ -73,9 +99,10 @@ export default function MisArticulosScreen() {
         observaciones: item.observaciones ?? null,
         costoDevolucion: item.costoDevolucion ?? null,
         enSubasta: item.enSubasta,
+        aceptacion: item.aceptacion ?? null,
       }));
       setArticles(mapped);
-      if (mapped.some((a) => a.estadoInspeccion === 'pendiente')) {
+      if (mapped.some((a) => a.estadoInspeccion === 'en_revision')) {
         fetch(API_ENDPOINTS.configEmpresa('direccion_inspeccion'))
           .then((r) => r.ok ? r.json() : null)
           .then((d) => d && setDireccionInspeccion(d.valor))
@@ -91,8 +118,9 @@ export default function MisArticulosScreen() {
   useFocusEffect(useCallback(() => { fetchArticles(); }, [fetchArticles]));
 
   const filtered = articles.filter((a) => {
-    if (activeFilter === 'aprobados') return a.estadoInspeccion === 'aprobado' || a.estadoInspeccion === 'en_venta';
-    if (activeFilter === 'en_revision') return a.estadoInspeccion === 'pendiente';
+    if (activeFilter === 'aprobados')  return a.estadoInspeccion === 'aprobado' || a.estadoInspeccion === 'aceptado' || a.estadoInspeccion === 'en_venta';
+    if (activeFilter === 'en_revision') return a.estadoInspeccion === 'en_revision';
+    if (activeFilter === 'rechazados') return a.estadoInspeccion === 'rechazado_admin' || a.estadoInspeccion === 'rechazado_usuario';
     return true;
   });
 
@@ -101,13 +129,17 @@ export default function MisArticulosScreen() {
       case 'aprobado':
         router.push({ pathname: '/vender/articulo-aprobado', params: { titulo: article.titulo, categoria: article.categoria, productoId: String(article.productoId) } });
         break;
-      case 'rechazado':
-        router.push({ pathname: '/vender/inspeccion-rechazada', params: { titulo: article.titulo, observaciones: article.observaciones ?? '', costoDevolucion: String(article.costoDevolucion ?? '') } });
+      case 'rechazado_admin':
+        router.push({ pathname: '/vender/inspeccion-rechazada', params: { titulo: article.titulo, observaciones: article.observaciones ?? '', costoDevolucion: String(article.costoDevolucion ?? ''), source: 'admin' } });
         break;
+      case 'rechazado_usuario':
+        router.push({ pathname: '/vender/inspeccion-rechazada', params: { titulo: article.titulo, observaciones: '', costoDevolucion: '', source: 'usuario' } });
+        break;
+      case 'aceptado':
       case 'en_venta':
         router.push({ pathname: '/vender/ubicacion-seguro', params: { titulo: article.titulo } });
         break;
-      case 'pendiente':
+      case 'en_revision':
         break;
     }
   };
@@ -115,7 +147,7 @@ export default function MisArticulosScreen() {
   if (!session) return null;
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <Appbar.Header style={styles.appbar}>
         <Appbar.BackAction onPress={() => router.back()} color="#614F3A" />
         <Image source={require('../../assets/images/hammer-icon.png')} style={styles.logoBadge} resizeMode="contain" />
@@ -145,7 +177,7 @@ export default function MisArticulosScreen() {
           <View style={styles.articlesList}>
             {filtered.map((article) => {
               const badge = STATUS_BADGE[article.estadoInspeccion];
-              const isInteractive = article.estadoInspeccion !== 'pendiente';
+              const isInteractive = article.estadoInspeccion !== 'en_revision';
               return (
                 <Pressable
                   key={article.productoId}
@@ -165,15 +197,15 @@ export default function MisArticulosScreen() {
                     <Text style={styles.articleName} numberOfLines={1}>{article.titulo}</Text>
                     <View style={styles.articleDetailRow}>
                       <MaterialCommunityIcons
-                        name={article.estadoInspeccion === 'aprobado' || article.estadoInspeccion === 'en_venta' ? 'check-circle-outline' : article.estadoInspeccion === 'rechazado' ? 'alert-circle-outline' : 'clock-outline'}
+                        name={STATUS_ICON[article.estadoInspeccion] as any}
                         size={16}
                         color={badge.text}
                       />
                       <Text style={[styles.articleDetailText, { color: badge.text }]}>
-                        {article.estadoInspeccion === 'pendiente' ? 'Esperando dictamen' : article.estadoInspeccion === 'aprobado' ? 'Autenticidad verificada' : article.estadoInspeccion === 'rechazado' ? 'Ver motivos del rechazo' : 'Listado en subasta'}
+                        {STATUS_SUBTEXTO[article.estadoInspeccion]}
                       </Text>
                     </View>
-                    {article.estadoInspeccion === 'pendiente' && direccionInspeccion && (
+                    {article.estadoInspeccion === 'en_revision' && direccionInspeccion && (
                       <View style={styles.articleDetailRow}>
                         <MaterialCommunityIcons name="map-marker-outline" size={16} color="#999" />
                         <Text style={[styles.articleDetailText, { color: '#666', fontWeight: '400' }]} numberOfLines={2}>

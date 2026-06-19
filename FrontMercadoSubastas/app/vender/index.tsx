@@ -3,19 +3,18 @@ import { useRouter } from 'expo-router';
 import { useState, useEffect } from 'react';
 import {
   ActivityIndicator,
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
   TextInput,
   View,
-  Image,
 } from 'react-native';
-import { Appbar, Text, Menu } from 'react-native-paper';
+import { Appbar, Menu, Text } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import BottomTabBar from '@/components/BottomTabBar';
 import { API_ENDPOINTS } from '@/constants/api';
 import { useSession } from '@/contexts/SessionContext';
-import * as ImagePicker from 'expo-image-picker';
 
 const CATEGORY_OPTIONS = [
   'Relojería de Lujo',
@@ -24,15 +23,6 @@ const CATEGORY_OPTIONS = [
   'Arte',
   'Electrónica',
   'Moda y Accesorios',
-];
-
-const IMAGE_SLOTS = [
-  { label: 'PRINCIPAL', icon: 'camera-outline' as const },
-  { label: 'ÁNGULO 2', icon: 'image-outline' as const },
-  { label: 'ÁNGULO 3', icon: 'image-outline' as const },
-  { label: 'DETALLE 1', icon: 'image-outline' as const },
-  { label: 'DETALLE 2', icon: 'image-outline' as const },
-  { label: 'CERTIFICADO', icon: 'file-document-outline' as const },
 ];
 
 export default function SubastarArticuloScreen() {
@@ -51,40 +41,11 @@ export default function SubastarArticuloScreen() {
   const [isChecked, setIsChecked] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const [uploadedFotos, setUploadedFotos] = useState<Record<number, string>>({});
-  const [productoId, setProductoId] = useState<number | null>(null);
-  const [submitted, setSubmitted] = useState(false);
 
   const canSubmit = articleName.trim() && description.trim() && isChecked && !isLoading;
-  const fotosCount = Object.keys(uploadedFotos).length;
-
-  const handleSlotPress = async (slotIndex: number, currentProductoId: number | null) => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') return;
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      base64: true,
-      quality: 0.6,
-    });
-    if (result.canceled || !result.assets[0].base64) return;
-    const base64 = result.assets[0].base64;
-    if (!currentProductoId) return;
-    try {
-      await fetch(API_ENDPOINTS.subirFoto, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ producto: currentProductoId, imagen: base64 }),
-      });
-      setUploadedFotos((prev) => ({ ...prev, [slotIndex]: result.assets[0].uri }));
-    } catch {}
-  };
 
   const handleSubmit = async () => {
-    if (!session) {
-      router.replace('/sign-in');
-      return;
-    }
-
+    if (!session) { router.replace('/sign-in'); return; }
     setError('');
     setIsLoading(true);
     try {
@@ -106,8 +67,7 @@ export default function SubastarArticuloScreen() {
         return;
       }
       const data = await res.json();
-      setProductoId(data.productoId);
-      setSubmitted(true);
+      router.push({ pathname: '/vender/fotos', params: { productoId: String(data.productoId) } });
     } catch {
       setError('No se pudo conectar con el servidor.');
     } finally {
@@ -125,7 +85,7 @@ export default function SubastarArticuloScreen() {
   if (!session) return null;
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <Appbar.Header style={styles.appbar}>
         <Appbar.BackAction onPress={() => router.back()} color="#614F3A" />
         <Image
@@ -142,6 +102,7 @@ export default function SubastarArticuloScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <Text style={styles.pageTitle}>Subastar Artículo</Text>
+        <Text style={styles.pageSubtitle}>Paso 1 de 2 — Datos del producto</Text>
 
         <SectionHeader title="Detalles del Lote" />
 
@@ -202,51 +163,6 @@ export default function SubastarArticuloScreen() {
           textAlignVertical="top"
         />
 
-        <SectionHeader title="Galería de Imágenes" />
-
-        {submitted && (
-          <View style={styles.successBanner}>
-            <MaterialCommunityIcons name="check-circle-outline" size={20} color="#2E7D32" />
-            <Text style={styles.successBannerText}>
-              Artículo creado. Ahora subí las fotos ({fotosCount}/6).
-            </Text>
-          </View>
-        )}
-
-        <View style={styles.imageGrid}>
-          {IMAGE_SLOTS.map((slot, index) => {
-            const uploaded = !!uploadedFotos[index];
-            const disabled = !submitted;
-            return (
-              <Pressable
-                key={slot.label}
-                style={[styles.imageSlot, disabled && styles.imageSlotDisabled]}
-                onPress={() => !disabled && handleSlotPress(index, productoId)}
-              >
-                <View style={styles.imageSlotContent}>
-                  {uploaded ? (
-                    <Image source={{ uri: uploadedFotos[index] }} style={styles.imagePreview} />
-                  ) : (
-                    <MaterialCommunityIcons
-                      name={slot.icon as any}
-                      size={40}
-                      color={disabled ? '#E0E0E0' : '#D0D0D0'}
-                    />
-                  )}
-                  <Text style={[styles.imageSlotLabel, disabled && { color: '#C0C0C0' }]}>
-                    {slot.label}
-                  </Text>
-                </View>
-              </Pressable>
-            );
-          })}
-        </View>
-        {!submitted && (
-          <Text style={styles.photoHint}>
-            Las fotos se podrán subir una vez que envíes el artículo.
-          </Text>
-        )}
-
         <View style={styles.legalRow}>
           <Pressable
             onPress={() => setIsChecked(!isChecked)}
@@ -262,28 +178,21 @@ export default function SubastarArticuloScreen() {
 
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-        {!submitted ? (
-          <Pressable
-            style={[styles.submitButton, !canSubmit && styles.submitButtonDisabled]}
-            onPress={handleSubmit}
-            disabled={!canSubmit}
-          >
-            {isLoading
-              ? <ActivityIndicator color="#FFF" />
-              : <Text style={styles.submitButtonText}>ENVIAR ARTÍCULO</Text>
-            }
-          </Pressable>
-        ) : (
-          <Pressable
-            style={[styles.submitButton, fotosCount === 0 && styles.submitButtonDisabled]}
-            onPress={() => router.push('/vender/mis-articulos')}
-            disabled={fotosCount === 0}
-          >
-            <Text style={styles.submitButtonText}>
-              {fotosCount === 0 ? 'SUBÍ AL MENOS 1 FOTO' : `CONTINUAR (${fotosCount} foto${fotosCount > 1 ? 's' : ''})`}
-            </Text>
-          </Pressable>
-        )}
+        <Pressable
+          style={[styles.submitButton, !canSubmit && styles.submitButtonDisabled]}
+          onPress={handleSubmit}
+          disabled={!canSubmit}
+        >
+          {isLoading
+            ? <ActivityIndicator color="#FFF" />
+            : (
+              <View style={styles.submitButtonInner}>
+                <Text style={styles.submitButtonText}>CONTINUAR</Text>
+                <MaterialCommunityIcons name="arrow-right" size={20} color="#FFF" />
+              </View>
+            )
+          }
+        </Pressable>
 
         <View style={{ height: 8 }} />
       </ScrollView>
@@ -304,7 +213,8 @@ const styles = StyleSheet.create({
   appbar: { backgroundColor: 'transparent', borderBottomWidth: 1, borderBottomColor: '#F0F0F0', elevation: 0 },
   logoBadge: { width: 50, height: 35 },
   scrollContent: { paddingHorizontal: 24, paddingVertical: 20, paddingBottom: 40 },
-  pageTitle: { fontSize: 26, fontWeight: '800', color: '#1A1A1A', marginBottom: 24 },
+  pageTitle: { fontSize: 26, fontWeight: '800', color: '#1A1A1A', marginBottom: 4 },
+  pageSubtitle: { fontSize: 13, color: '#999', marginBottom: 24 },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 20, marginTop: 8 },
   sectionHeaderBar: { width: 4, height: 20, backgroundColor: '#FFD700', borderRadius: 2, marginRight: 10 },
   sectionHeaderText: { fontSize: 16, fontWeight: '700', color: '#1A1A1A' },
@@ -313,12 +223,6 @@ const styles = StyleSheet.create({
   textInputMultiline: { paddingTop: 14, paddingBottom: 14 },
   pickerContainer: { backgroundColor: '#F5F5F5', borderRadius: 10, height: 52, paddingHorizontal: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
   pickerText: { color: '#1A1A1A', fontSize: 14 },
-  imageGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, marginBottom: 24, justifyContent: 'space-between' },
-  imageSlot: { width: '48%', aspectRatio: 1, borderStyle: 'solid', borderWidth: 2, borderColor: '#E0E0E0', borderRadius: 16, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F8F9FB', position: 'relative', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 3, paddingHorizontal: 8 },
-  imageSlotContent: { justifyContent: 'center', alignItems: 'center', flexDirection: 'column' },
-  imageSlotLabel: { fontSize: 11, fontWeight: '700', color: '#666', textTransform: 'uppercase', marginTop: 8, letterSpacing: 0.8 },
-  enArchivoBadge: { position: 'absolute', bottom: 10, backgroundColor: '#FFD700', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 },
-  enArchivoBadgeText: { fontSize: 10, fontWeight: '800', color: '#333' },
   legalRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 24, gap: 12, backgroundColor: 'rgba(26,26,26,0.04)', padding: 16, borderRadius: 12, borderLeftWidth: 4, borderLeftColor: '#FFD700' },
   checkbox: { width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: '#FFD700', justifyContent: 'center', alignItems: 'center', marginTop: 2, backgroundColor: '#FFFFFF' },
   checkboxChecked: { backgroundColor: '#FFD700', borderColor: '#FFD700' },
@@ -326,13 +230,6 @@ const styles = StyleSheet.create({
   errorText: { fontSize: 13, color: '#D32F2F', textAlign: 'center', marginBottom: 16 },
   submitButton: { backgroundColor: '#FFD700', height: 56, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   submitButtonDisabled: { backgroundColor: '#CCCCCC' },
+  submitButtonInner: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   submitButtonText: { color: 'white', fontWeight: '700', fontSize: 16, letterSpacing: 0.5 },
-  imageSlotDisabled: { opacity: 0.5 },
-  imagePreview: { width: '100%', height: '100%', borderRadius: 14, position: 'absolute' },
-  successBanner: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: '#E8F5E9', borderRadius: 10, padding: 12, marginBottom: 16,
-  },
-  successBannerText: { fontSize: 13, color: '#2E7D32', fontWeight: '600', flex: 1 },
-  photoHint: { fontSize: 12, color: '#999', textAlign: 'center', marginBottom: 16, fontStyle: 'italic' },
 });

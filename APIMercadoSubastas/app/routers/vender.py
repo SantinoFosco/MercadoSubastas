@@ -132,11 +132,10 @@ def get_articulos_cliente(db: Session, cliente_id: int):
         item_catalogo = db.query(models.ItemCatalogo).filter(
             models.ItemCatalogo.producto == producto.identificador,
         ).first()
-        aceptacion_ok = db.query(models.AceptacionArticulo).filter(
+        aceptacion = db.query(models.AceptacionArticulo).filter(
             models.AceptacionArticulo.producto == producto.identificador,
-            models.AceptacionArticulo.estado == "aceptado",
         ).first()
-        en_subasta = item_catalogo is not None and aceptacion_ok is not None
+        en_subasta = item_catalogo is not None and aceptacion is not None and aceptacion.estado == "aceptado"
         result.append(schemas.ArticuloListItem(
             productoId=producto.identificador,
             presentacionId=pp.identificador if pp else 0,
@@ -147,6 +146,7 @@ def get_articulos_cliente(db: Session, cliente_id: int):
             observaciones=inspeccion.observaciones,
             costoDevolucion=float(inspeccion.costo_devolucion) if inspeccion.costo_devolucion else None,
             enSubasta=en_subasta,
+            aceptacion=aceptacion.estado if aceptacion else None,
         ))
     return result
 

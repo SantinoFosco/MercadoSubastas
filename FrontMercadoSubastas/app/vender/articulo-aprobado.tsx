@@ -3,6 +3,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Image,
   Pressable,
   ScrollView,
@@ -26,7 +27,7 @@ type Condiciones = {
 };
 
 function formatMonto(n: number) {
-  return `$${n.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `$${Math.abs(n).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -62,8 +63,13 @@ export default function ArticuloAprobadoScreen() {
     if (!productoId) return;
     setSubmitting(true);
     try {
-      await fetch(API_ENDPOINTS.rechazarCondiciones(productoId), { method: 'POST' });
-      router.back();
+      const res = await fetch(API_ENDPOINTS.rechazarCondiciones(productoId), { method: 'POST' });
+      if (!res.ok) {
+        const d = await res.json();
+        Alert.alert('Error', d.detail ?? 'No se pudieron rechazar las condiciones.');
+        return;
+      }
+      router.replace({ pathname: '/vender/inspeccion-rechazada', params: { titulo, source: 'usuario' } });
     } finally {
       setSubmitting(false);
     }
